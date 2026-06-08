@@ -54,6 +54,15 @@
         }
       ]
     ],
-    "scheme": "vilanovacoletas"
+    "scheme": "vilanovacoletas",
+    "extra": {
+      "router": {
+        "origin": "https://api.vilanova-agro.com.br"
+      },
+      "eas": {
+        "projectId": "05e165d3-760d-4fb1-969f-5b4d783538eb"
+      }
+    },
+    "owner": "vinixdev00"
   }
 }
