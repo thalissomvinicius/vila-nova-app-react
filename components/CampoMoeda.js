@@ -36,7 +36,7 @@ export default function CampoMoeda({ field, value, onChange, error }) {
           placeholder={placeholder || 'R$ 0,00'}
           placeholderTextColor={Colors.grayText}
           keyboardType="numeric"
-          value={value || ''}
+          value={value === null || value === undefined ? '' : String(value)}
           onChangeText={handleChangeText}
         />
       </View>

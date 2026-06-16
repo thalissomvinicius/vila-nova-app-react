@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { HelperText, TextInput as PaperTextInput } from 'react-native-paper';
 import { Colors } from '../core/colors';
+import { normalizeIntegerInput } from '../core/numberInput';
 
 export default function CampoNumero({ field, value, onChange, error, visualMode }) {
   const { id, titulo, placeholder, obrigatorio } = field;
@@ -14,8 +15,8 @@ export default function CampoNumero({ field, value, onChange, error, visualMode 
           label={`${titulo}${obrigatorio === 1 ? ' *' : ''}`}
           placeholder={placeholder || '0'}
           keyboardType="numeric"
-          value={value || ''}
-          onChangeText={onChange}
+          value={value === null || value === undefined ? '' : String(value)}
+          onChangeText={(text) => onChange(normalizeIntegerInput(text))}
           error={!!error}
           outlineColor={Colors.cardBorder}
           activeOutlineColor={Colors.greenInstitutional}
@@ -39,8 +40,8 @@ export default function CampoNumero({ field, value, onChange, error, visualMode 
         placeholder={placeholder || '0'}
         placeholderTextColor={Colors.grayText}
         keyboardType="numeric"
-        value={value || ''}
-        onChangeText={onChange}
+        value={value === null || value === undefined ? '' : String(value)}
+        onChangeText={(text) => onChange(normalizeIntegerInput(text))}
       />
       {error && <Text style={styles.errorText}>{error}</Text>}
     </View>
@@ -49,7 +50,7 @@ export default function CampoNumero({ field, value, onChange, error, visualMode 
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 20,
+    marginBottom: 14,
   },
   paperContainer: {
     marginBottom: 10,
@@ -62,9 +63,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.grayDark,
+    fontSize: 13,
+    fontWeight: '900',
+    color: Colors.greenDark,
   },
   required: {
     color: Colors.danger,
@@ -74,7 +75,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: Colors.cardBorder,
-    borderRadius: 12,
+    borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 15,

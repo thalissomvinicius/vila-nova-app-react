@@ -7,21 +7,20 @@ const CQO_CORTE_FORM = {
   id: 'form_cqo_corte',
   area_id: 'campo',
   titulo: 'CQO Corte',
-  descricao: 'Piloto digital do formulario Corte. Baseado no papel CQO Corte e Carreamento e alinhado a tabela dig_corte da planilha 1_Digitacao_CQO.',
-  versao: 2,
+  descricao: 'Piloto digital do formulário Corte. Baseado no papel CQO Corte e Carreamento e alinhado à tabela dig_corte da planilha 1_Digitacao_CQO.',
+  versao: 4,
   ativo: 1,
   campos_json: JSON.stringify([
     { id: 'nome_polo', tipo: 'selecao', titulo: 'Polo', opcoes: ['Tomé-Açu'], obrigatorio: 1, legado: 'NomePolo' },
     { id: 'nome_fazenda', tipo: 'selecao', titulo: 'Fazenda', opcoes: CQO_FAZENDAS_TOME_ACU, obrigatorio: 1, legado: 'NomeFazenda' },
     { id: 'parcela', tipo: 'texto', titulo: 'Parcela', placeholder: 'Parcela avaliada', obrigatorio: 1, legado: 'Parcela' },
-    { id: 'data_avaliacao', tipo: 'data', titulo: 'Data da avaliacao', obrigatorio: 1, legado: 'DataAvaliacao' },
-    { id: 'ciclo_mes', tipo: 'numero', titulo: 'Ciclo do mes', placeholder: 'Ex: 1', obrigatorio: 0, legado: 'ciclo_mes' },
-    { id: 'matricula_avaliador', tipo: 'texto', titulo: 'Matricula do avaliador', placeholder: 'Ex: 2005', obrigatorio: 1, legado: 'MatriculaAvaliadores' },
-    { id: 'fiscal_resp', tipo: 'texto', titulo: 'Fiscal responsavel', placeholder: 'Nome do fiscal', obrigatorio: 1, legado: 'Fiscal Resp' },
-    { id: 'linhas_corte', tipo: 'linhas_cqo_corte', titulo: 'Linhas de avaliacao do corte', obrigatorio: 1, legado: 'linhas_raw' },
-    { id: 'observacao', tipo: 'observacao', titulo: 'Observacao geral', placeholder: 'Registre observacoes sem aplicar regra automatica.', obrigatorio: 0, legado: 'Observacao' },
-    { id: 'gps_cqo_corte', tipo: 'gps', titulo: 'Localizacao GPS', obrigatorio: 0 },
-    { id: 'assinatura_manual', tipo: 'assinatura', titulo: 'Assinatura manual', obrigatorio: 0 }
+    { id: 'data_avaliacao', tipo: 'data', titulo: 'Data da avaliação', obrigatorio: 1, legado: 'DataAvaliacao' },
+    { id: 'ciclo_mes', tipo: 'numero', titulo: 'Ciclo do mês', placeholder: 'Ex: 1', obrigatorio: 0, legado: 'ciclo_mes' },
+    { id: 'matricula_avaliador', tipo: 'texto', titulo: 'Matrícula do avaliador', placeholder: 'Ex: 2005', obrigatorio: 1, legado: 'MatriculaAvaliadores' },
+    { id: 'fiscal_resp', tipo: 'texto', titulo: 'Fiscal responsável', placeholder: 'Nome do fiscal', obrigatorio: 1, legado: 'Fiscal Resp' },
+    { id: 'linhas_corte', tipo: 'linhas_cqo_corte', titulo: 'Linhas de avaliação do corte', obrigatorio: 1, legado: 'linhas_raw' },
+    { id: 'observacao', tipo: 'observacao', titulo: 'Observação geral', placeholder: 'Registre observações sem aplicar regra automática.', obrigatorio: 0, legado: 'Observacao' },
+    { id: 'acompanhamento', tipo: 'acompanhamento', titulo: 'Acompanhamento', obrigatorio: 0 }
   ]),
   atualizado_em: new Date().toISOString()
 };
@@ -30,8 +29,8 @@ const CQO_CARREAMENTO_FORM = {
   id: 'form_cqo_carreamento_fruto_solto',
   area_id: 'campo',
   titulo: 'CQO Carreamento e Fruto Solto',
-  descricao: 'Piloto digital do controle unico de Carreamento e Fruto Solto. Fruto solto pode ser preenchido quando a avaliacao ocorrer, mas normalmente fica opcional.',
-  versao: 3,
+  descricao: 'Piloto digital do controle único de Carreamento e Fruto Solto. Fruto solto pode ser preenchido quando a avaliação ocorrer, mas normalmente fica opcional.',
+  versao: 5,
   ativo: 1,
   campos_json: JSON.stringify([
     { id: 'nome_polo', tipo: 'selecao', titulo: 'Polo', opcoes: ['Tomé-Açu'], obrigatorio: 1, legado: 'NomePolo' },
@@ -42,14 +41,13 @@ const CQO_CARREAMENTO_FORM = {
     { id: 'total_plantas_parcela', tipo: 'numero', titulo: 'Total de plantas da parcela', placeholder: 'Ex: 5067', obrigatorio: 0 },
     { id: 'total_cachos_carreados', tipo: 'numero', titulo: 'Total de cachos carreados', placeholder: 'Ex: 120', obrigatorio: 0 },
     { id: 'variedade', tipo: 'texto', titulo: 'Variedade', placeholder: 'Ex: cultivar/variedade', obrigatorio: 0 },
-    { id: 'data_avaliacao', tipo: 'data', titulo: 'Data da avaliacao', obrigatorio: 1, legado: 'DataAvaliacao' },
-    { id: 'ciclo_mes', tipo: 'numero', titulo: 'Ciclo do mes', placeholder: 'Ex: 1', obrigatorio: 0, legado: 'Ciclo_mes' },
-    { id: 'matricula_avaliador', tipo: 'texto', titulo: 'Matricula do avaliador', placeholder: 'Ex: 2005', obrigatorio: 1, legado: 'MatriculaAvaliadores' },
-    { id: 'fiscal_resp', tipo: 'texto', titulo: 'Fiscal responsavel', placeholder: 'Nome do fiscal', obrigatorio: 1, legado: 'Fiscal Resp' },
-    { id: 'linhas_carreamento', tipo: 'linhas_cqo_carreamento', titulo: 'Linhas de avaliacao do carreamento', obrigatorio: 1, legado: 'linhas_raw' },
-    { id: 'observacao', tipo: 'observacao', titulo: 'Observacao geral', placeholder: 'Registre observacoes sem aplicar regra automatica.', obrigatorio: 0 },
-    { id: 'gps_cqo_carreamento', tipo: 'gps', titulo: 'Localizacao GPS', obrigatorio: 0 },
-    { id: 'assinatura_manual', tipo: 'assinatura', titulo: 'Assinatura manual', obrigatorio: 0 }
+    { id: 'data_avaliacao', tipo: 'data', titulo: 'Data da avaliação', obrigatorio: 1, legado: 'DataAvaliacao' },
+    { id: 'ciclo_mes', tipo: 'numero', titulo: 'Ciclo do mês', placeholder: 'Ex: 1', obrigatorio: 0, legado: 'Ciclo_mes' },
+    { id: 'matricula_avaliador', tipo: 'texto', titulo: 'Matrícula do avaliador', placeholder: 'Ex: 2005', obrigatorio: 1, legado: 'MatriculaAvaliadores' },
+    { id: 'fiscal_resp', tipo: 'texto', titulo: 'Fiscal responsável', placeholder: 'Nome do fiscal', obrigatorio: 1, legado: 'Fiscal Resp' },
+    { id: 'linhas_carreamento', tipo: 'linhas_cqo_carreamento', titulo: 'Linhas de avaliação do carreamento', obrigatorio: 1, legado: 'linhas_raw' },
+    { id: 'observacao', tipo: 'observacao', titulo: 'Observação geral', placeholder: 'Registre observações sem aplicar regra automática.', obrigatorio: 0 },
+    { id: 'acompanhamento', tipo: 'acompanhamento', titulo: 'Acompanhamento', obrigatorio: 0 }
   ]),
   atualizado_em: new Date().toISOString()
 };
@@ -132,7 +130,8 @@ const webStorage = {
   gps: [],
   sync_queue: [],
   logs: [],
-  usuarios: []
+  usuarios: [],
+  headcount_colaboradores: []
 };
 
 // Initial Sync with LocalStorage for Web
@@ -142,8 +141,12 @@ if (Platform.OS === 'web') {
     if (savedRespostas) webStorage.respostas = JSON.parse(savedRespostas);
     const savedSync = localStorage.getItem('vilanova_sync_queue');
     if (savedSync) webStorage.sync_queue = JSON.parse(savedSync);
+    const savedGps = localStorage.getItem('vilanova_gps');
+    if (savedGps) webStorage.gps = JSON.parse(savedGps);
     const savedUsuarios = localStorage.getItem('vilanova_usuarios');
     if (savedUsuarios) webStorage.usuarios = JSON.parse(savedUsuarios);
+    const savedHeadcount = localStorage.getItem('vilanova_headcount_colaboradores');
+    if (savedHeadcount) webStorage.headcount_colaboradores = JSON.parse(savedHeadcount);
   } catch (e) {
     console.error('Erro ao ler do localStorage:', e);
   }
@@ -163,6 +166,17 @@ export const AppDatabase = {
 
     // 1. Create Tables
     db.execSync(`
+      PRAGMA foreign_keys = ON;
+      PRAGMA journal_mode = WAL;
+    `);
+
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS app_meta (
+        chave TEXT PRIMARY KEY,
+        valor TEXT NOT NULL,
+        atualizado_em TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS usuarios (
         id TEXT PRIMARY KEY,
         nome TEXT NOT NULL,
@@ -173,6 +187,22 @@ export const AppDatabase = {
         refresh_token TEXT,
         criado_em TEXT NOT NULL,
         ultimo_acesso TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS headcount_colaboradores (
+        matricula TEXT PRIMARY KEY,
+        senha TEXT NOT NULL DEFAULT '1234',
+        nome TEXT NOT NULL,
+        departamento TEXT,
+        cargo TEXT,
+        gestor TEXT,
+        status TEXT NOT NULL DEFAULT 'ATIVO',
+        admissao_excel TEXT,
+        fonte_aba TEXT,
+        fonte_arquivo TEXT,
+        reference_date TEXT,
+        imported_at TEXT,
+        updated_at TEXT NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS areas (
@@ -261,7 +291,32 @@ export const AppDatabase = {
         usuario_id TEXT,
         criado_em TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS sync_runs (
+        id TEXT PRIMARY KEY,
+        iniciado_em TEXT NOT NULL,
+        finalizado_em TEXT,
+        status TEXT NOT NULL,
+        total_itens INTEGER DEFAULT 0,
+        total_sucesso INTEGER DEFAULT 0,
+        total_erro INTEGER DEFAULT 0,
+        erro_msg TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_respostas_status_criado ON respostas(status, criado_em);
+      CREATE INDEX IF NOT EXISTS idx_respostas_formulario ON respostas(formulario_id, criado_em);
+      CREATE INDEX IF NOT EXISTS idx_sync_queue_status_criado ON sync_queue(status, criado_em);
+      CREATE INDEX IF NOT EXISTS idx_sync_queue_ref ON sync_queue(referencia_id);
+      CREATE INDEX IF NOT EXISTS idx_gps_resposta ON gps(resposta_id);
+      CREATE INDEX IF NOT EXISTS idx_anexos_resposta ON anexos(resposta_id);
+      CREATE INDEX IF NOT EXISTS idx_assinaturas_resposta ON assinaturas(resposta_id);
+      CREATE INDEX IF NOT EXISTS idx_headcount_status ON headcount_colaboradores(status);
     `);
+
+    db.runSync(
+      'INSERT OR REPLACE INTO app_meta (chave, valor, atualizado_em) VALUES (?, ?, ?)',
+      ['schema_version', '2026.06.09.1', new Date().toISOString()]
+    );
 
     // 2. Seed Default Areas if empty
     const areaCount = db.getFirstSync('SELECT COUNT(*) as count FROM areas');
@@ -421,6 +476,14 @@ export const AppDatabase = {
         }
         return webStorage.usuarios[0] || null;
       }
+      if (sql.includes('SELECT * FROM headcount_colaboradores')) {
+        if (params[0]) {
+          return webStorage.headcount_colaboradores.find(
+            (item) => item.matricula === params[0] && item.status === 'ATIVO'
+          ) || null;
+        }
+        return webStorage.headcount_colaboradores[0] || null;
+      }
       return null;
     }
     return db.getFirstSync(sql, params);
@@ -445,11 +508,21 @@ export const AppDatabase = {
         if (index >= 0) webStorage.sync_queue[index] = data;
         else webStorage.sync_queue.push(data);
         localStorage.setItem('vilanova_sync_queue', JSON.stringify(webStorage.sync_queue));
+      } else if (table === 'gps') {
+        const index = webStorage.gps.findIndex(g => g.id === data.id);
+        if (index >= 0) webStorage.gps[index] = data;
+        else webStorage.gps.push(data);
+        localStorage.setItem('vilanova_gps', JSON.stringify(webStorage.gps));
       } else if (table === 'usuarios') {
         const index = webStorage.usuarios.findIndex(u => u.id === data.id);
         if (index >= 0) webStorage.usuarios[index] = data;
         else webStorage.usuarios.push(data);
         localStorage.setItem('vilanova_usuarios', JSON.stringify(webStorage.usuarios));
+      } else if (table === 'headcount_colaboradores') {
+        const index = webStorage.headcount_colaboradores.findIndex(u => u.matricula === data.matricula);
+        if (index >= 0) webStorage.headcount_colaboradores[index] = data;
+        else webStorage.headcount_colaboradores.push(data);
+        localStorage.setItem('vilanova_headcount_colaboradores', JSON.stringify(webStorage.headcount_colaboradores));
       }
       return { lastInsertRowId: data.id || Date.now(), changes: 1 };
     }
