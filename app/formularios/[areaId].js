@@ -1,193 +1,208 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  StatusBar,
-} from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AppDatabase } from '../../core/database';
 import { Colors } from '../../core/colors';
+import { IconBox, ScreenShell, chromeStyles } from '../../components/PrototypeChrome';
+
+const preferredOrder = ['form_cqo_corte', 'form_cqo_carreamento_fruto_solto'];
+
+function formMeta(form) {
+  if (form.id === 'form_cqo_corte') {
+    return {
+      title: 'CQO Corte',
+      subtitle: 'Formulário prioritário do piloto',
+      icon: 'chart-bar',
+      muted: false,
+    };
+  }
+
+  if (form.id === 'form_cqo_carreamento_fruto_solto') {
+    return {
+      title: 'Carreamento',
+      subtitle: 'Formulário de controle operacional',
+      icon: 'format-list-text',
+      muted: true,
+    };
+  }
+
+  return {
+    title: form.titulo,
+    subtitle: form.descricao || 'Ficha de coleta disponível',
+    icon: 'file-document-outline',
+    muted: true,
+  };
+}
 
 export default function FormulariosLista() {
   const router = useRouter();
-  const { areaId, nome } = useLocalSearchParams();
+  const { areaId } = useLocalSearchParams();
   const [formularios, setFormularios] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    setIsLoading(true);
     try {
       const results = AppDatabase.getAll(
         'SELECT * FROM formularios WHERE area_id = ? AND ativo = 1',
-        [areaId]
+        [areaId || 'campo']
       );
-      
-      const mapped = results.map(row => {
-        let count = 0;
-        try {
-          const fields = JSON.parse(row.campos_json);
-          count = Array.isArray(fields) ? fields.length : 0;
-        } catch (_) {}
-        return { ...row, camposCount: count };
-      });
 
-      setFormularios(mapped);
+      const onlyCqo = results
+        .filter((item) => preferredOrder.includes(item.id))
+        .sort((a, b) => preferredOrder.indexOf(a.id) - preferredOrder.indexOf(b.id));
+
+      setFormularios(onlyCqo.length ? onlyCqo : results);
     } catch (e) {
       console.error('Error fetching forms:', e);
+    } finally {
+      setIsLoading(false);
     }
   }, [areaId]);
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ title: nome || 'Formulários' }} />
-      <StatusBar barStyle="light-content" backgroundColor={Colors.greenDark} />
-      
-      {formularios.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>📂</Text>
-          <Text style={styles.emptyTitle}>Nenhum formulário disponível</Text>
-          <Text style={styles.emptyText}>
-            Sincronize o aplicativo na Central de Sync para baixar as fichas de coleta de campo disponíveis para esta área.
-          </Text>
+    <ScreenShell title="Formulários" activeNav="forms" showBack>
+      <StatusBar barStyle="dark-content" backgroundColor="#F7FAF6" />
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.sectionTitle}>
+          <Text style={styles.sectionHeading}>Qualidade Agrícola</Text>
+          <Text style={styles.sectionCount}>{isLoading ? 'carregando' : `${formularios.length} modelos`}</Text>
         </View>
-      ) : (
-        <FlatList
-          data={formularios}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContainer}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() =>
-                router.push({
-                  pathname: `/preencher/${item.id}`,
-                  params: { titulo: item.titulo },
-                })
-              }
-            >
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>{item.titulo}</Text>
-                <View style={styles.versionBadge}>
-                  <Text style={styles.versionText}>V{item.versao}</Text>
+
+        {isLoading ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator size="large" color={Colors.greenInstitutional} />
+            <Text style={styles.emptyTitle}>Carregando formularios</Text>
+            <Text style={styles.emptyText}>Buscando modelos disponiveis no aparelho.</Text>
+          </View>
+        ) : formularios.length === 0 ? (
+          <View style={styles.emptyState}>
+            <MaterialCommunityIcons name="folder-open-outline" size={44} color={Colors.greenInstitutional} />
+            <Text style={styles.emptyTitle}>Nenhum formulário disponível</Text>
+            <Text style={styles.emptyText}>Sincronize o app para baixar as fichas de coleta.</Text>
+          </View>
+        ) : (
+          formularios.map((item) => {
+            const meta = formMeta(item);
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.formCard}
+                onPress={() =>
+                  router.push({
+                    pathname: `/preencher/${item.id}`,
+                    params: { titulo: item.titulo },
+                  })
+                }
+              >
+                <IconBox name={meta.icon} muted={meta.muted} />
+                <View style={styles.formText}>
+                  <Text style={styles.formTitle}>{meta.title}</Text>
+                  <Text style={styles.formSubtitle}>{meta.subtitle}</Text>
                 </View>
-              </View>
-              {item.descricao ? (
-                <Text style={styles.cardDesc} numberOfLines={2}>
-                  {item.descricao}
-                </Text>
-              ) : null}
-              <View style={styles.cardFooter}>
-                <Text style={styles.footerIcon}>📋</Text>
-                <Text style={styles.footerText}>
-                  {item.camposCount} campos de coleta
-                </Text>
-                <Text style={styles.arrowIcon}>➔</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-        />
-      )}
-    </View>
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>Ativo</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </ScrollView>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  scroll: {
+    padding: chromeStyles.screenPadding,
+    paddingBottom: chromeStyles.bottomPadding,
   },
-  listContainer: {
-    padding: 16,
-  },
-  card: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  cardHeader: {
+  sectionTitle: {
     flexDirection: 'row',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    gap: 12,
+    marginTop: 2,
+    marginBottom: 11,
   },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '800',
+  sectionHeading: {
     color: Colors.grayDark,
-    flex: 1,
-    marginRight: 8,
+    fontSize: 19,
+    fontWeight: '900',
   },
-  versionBadge: {
-    backgroundColor: `${Colors.greenInstitutional}15`,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  versionText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: Colors.greenInstitutional,
-  },
-  cardDesc: {
-    fontSize: 13,
+  sectionCount: {
     color: Colors.grayText,
-    lineHeight: 18,
-    marginBottom: 16,
+    fontSize: 13,
+    fontWeight: '800',
   },
-  cardFooter: {
+  formCard: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: Colors.grayLight,
-    paddingTop: 12,
+    gap: 13,
+    marginBottom: 11,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(31,122,77,0.35)',
+    borderRadius: 8,
+    backgroundColor: '#FBFFFC',
+    shadowColor: '#203125',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.045,
+    shadowRadius: 18,
+    elevation: 1,
   },
-  footerIcon: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  footerText: {
-    fontSize: 12,
-    color: Colors.grayText,
-    fontWeight: '600',
+  formText: {
     flex: 1,
+    minWidth: 0,
   },
-  arrowIcon: {
-    fontSize: 14,
+  formTitle: {
+    color: '#17221B',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  formSubtitle: {
     color: Colors.grayText,
-    fontWeight: 'bold',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+    marginTop: 3,
+  },
+  badge: {
+    minHeight: 25,
+    justifyContent: 'center',
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    backgroundColor: Colors.greenLight,
+  },
+  badgeText: {
+    color: Colors.greenDark,
+    fontSize: 11,
+    fontWeight: '900',
   },
   emptyState: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
-  },
-  emptyIcon: {
-    fontSize: 64,
-    color: Colors.grayText,
-    marginBottom: 16,
-    opacity: 0.5,
+    justifyContent: 'center',
+    minHeight: 220,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    borderRadius: 8,
+    backgroundColor: Colors.white,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '800',
     color: Colors.grayDark,
-    marginBottom: 8,
-    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 12,
   },
   emptyText: {
-    fontSize: 14,
     color: Colors.grayText,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+    marginTop: 6,
     textAlign: 'center',
-    lineHeight: 20,
   },
 });

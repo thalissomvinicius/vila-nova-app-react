@@ -12,7 +12,7 @@ import {
 import { Colors } from '../core/colors';
 
 export default function CampoSelecao({ field, value, onChange, error, visualMode }) {
-  const { id, titulo, opcoes = [], obrigatorio } = field;
+  const { titulo, opcoes = [], obrigatorio } = field;
   const [modalVisible, setModalVisible] = useState(false);
 
   const handleSelect = (option) => {
@@ -95,10 +95,9 @@ export default function CampoSelecao({ field, value, onChange, error, visualMode
         <Text style={styles.arrowIcon}>▼</Text>
       </TouchableOpacity>
 
-      {/* Options Selection Modal */}
       <Modal
         visible={modalVisible}
-        transparent={true}
+        transparent
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
@@ -116,7 +115,7 @@ export default function CampoSelecao({ field, value, onChange, error, visualMode
             </View>
             <FlatList
               data={opcoes}
-              keyExtractor={(item, index) => index.toString()}
+              keyExtractor={(item, index) => `${item}_${index}`}
               ItemSeparatorComponent={() => <View style={styles.separator} />}
               renderItem={({ item }) => (
                 <TouchableOpacity
@@ -227,6 +226,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.danger,
   },
   valueText: {
+    flex: 1,
     fontSize: 15,
     color: Colors.grayDark,
     fontWeight: '500',
@@ -235,6 +235,7 @@ const styles = StyleSheet.create({
     color: Colors.grayText,
   },
   arrowIcon: {
+    marginLeft: 10,
     fontSize: 12,
     color: Colors.grayText,
   },
@@ -247,7 +248,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '50%',
+    maxHeight: '60%',
     paddingBottom: 24,
   },
   modalHeader: {
@@ -278,6 +279,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.greenLight,
   },
   optionText: {
+    flex: 1,
     fontSize: 15,
     color: Colors.grayDark,
   },
@@ -286,6 +288,7 @@ const styles = StyleSheet.create({
     color: Colors.greenInstitutional,
   },
   checkIcon: {
+    marginLeft: 12,
     fontSize: 16,
     color: Colors.greenInstitutional,
     fontWeight: 'bold',

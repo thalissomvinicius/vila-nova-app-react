@@ -1,43 +1,114 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
   ActivityIndicator,
+  Animated,
+  Easing,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import NetInfo from '@react-native-community/netinfo';
-import { useAuthStore } from '../core/authStore';
+import { useRouter } from 'expo-router';
 import { Colors } from '../core/colors';
+import { useAuthStore } from '../core/authStore';
 
 export default function Login() {
   const router = useRouter();
-  const [usuario, setUsuario] = useState('');
+  const [matricula, setMatricula] = useState('');
   const [senha, setSenha] = useState('');
   const [isOnline, setIsOnline] = useState(true);
-
   const { login, isLoading, errorMsg } = useAuthStore();
+  const accentValue = React.useRef(new Animated.Value(0)).current;
+  const fieldValue = React.useRef(new Animated.Value(0)).current;
+  const entranceValue = React.useRef(new Animated.Value(0)).current;
 
-  // Monitor network connection state
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
-      setIsOnline(!!state.isConnected);
+      setIsOnline(Boolean(state.isConnected) && state.isInternetReachable !== false);
     });
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    Animated.timing(entranceValue, {
+      toValue: 1,
+      duration: 650,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+
+    const accentAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(accentValue, {
+          toValue: 1,
+          duration: isLoading ? 900 : 2400,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(accentValue, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+        Animated.delay(isLoading ? 120 : 900),
+      ])
+    );
+
+    const fieldAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(fieldValue, {
+          toValue: 1,
+          duration: 3600,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(fieldValue, {
+          toValue: 0,
+          duration: 3600,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    accentAnimation.start();
+    fieldAnimation.start();
+    return () => {
+      accentAnimation.stop();
+      fieldAnimation.stop();
+    };
+  }, [accentValue, entranceValue, fieldValue, isLoading]);
+
   const handleLogin = async () => {
-    const success = await login(usuario, senha);
+    const success = await login(matricula, senha);
     if (success) {
       router.replace('/home');
     }
   };
+
+  const accentTranslateX = accentValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-84, 84],
+  });
+  const fieldTranslateY = fieldValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -10],
+  });
+  const fieldOpacity = fieldValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.42, 0.62],
+  });
+  const cardTranslateY = entranceValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [24, 0],
+  });
 
   return (
     <KeyboardAvoidingView
@@ -45,43 +116,84 @@ export default function Login() {
       style={styles.container}
     >
       <StatusBar barStyle="light-content" backgroundColor={Colors.greenDark} />
+
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.fieldPattern,
+          {
+            opacity: fieldOpacity,
+            transform: [{ rotate: '-8deg' }, { translateY: fieldTranslateY }],
+          },
+        ]}
+      >
+        <View style={styles.fieldLineWide} />
+        <View style={styles.fieldLine} />
+        <View style={styles.fieldLineShort} />
+        <View style={styles.fieldLineWide} />
+      </Animated.View>
+
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-        
-        {/* Connection Status Badge */}
-        <View style={styles.badgeContainer}>
-          <View style={[styles.badge, isOnline ? styles.badgeOnline : styles.badgeOffline]}>
-            <Text style={styles.badgeText}>
-              {isOnline ? 'ONLINE' : 'OFFLINE (MODO LOCAL)'}
-            </Text>
-          </View>
+        <View style={styles.statusPill}>
+          <View style={[styles.statusDot, isOnline ? styles.statusDotOnline : styles.statusDotOffline]} />
+          <Text style={styles.statusText}>{isOnline ? 'Online' : 'Offline local'}</Text>
         </View>
 
-        {/* Corporate Branding Headers */}
-        <View style={styles.headerContainer}>
-          <Text style={styles.logoTitle}>VILA NOVA</Text>
-          <Text style={styles.logoSubtitle}>AGROINDUSTRIAL</Text>
-          <Text style={styles.appTagline}>Coletor Operacional de Campo</Text>
+        <View style={styles.header}>
+          <Animated.View
+            style={[
+              styles.logoStage,
+              {
+                opacity: entranceValue,
+                transform: [{ translateY: cardTranslateY }],
+              },
+            ]}
+          >
+            <View style={styles.logoPlate} />
+            <Image source={require('../assets/logo.png')} style={styles.logo} resizeMode="contain" />
+            <View style={styles.accentTrack}>
+              <Animated.View
+                style={[
+                  styles.accentSweep,
+                  { transform: [{ translateX: accentTranslateX }] },
+                ]}
+              />
+            </View>
+          </Animated.View>
+          <Text style={styles.eyebrow}>Operação de Campo</Text>
+          <Text style={styles.title}>Coletor Vila Nova</Text>
+          <Text style={styles.subtitle}>Acesse com sua matrícula do Headcount.</Text>
         </View>
 
-        {/* Login Form Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Acesso ao Coletor</Text>
-          
-          {errorMsg && (
+        <Animated.View
+          style={[
+            styles.card,
+            {
+              opacity: entranceValue,
+              transform: [{ translateY: cardTranslateY }],
+            },
+          ]}
+        >
+          <Text style={styles.cardTitle}>Entrar no aplicativo</Text>
+
+          {errorMsg ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{errorMsg}</Text>
             </View>
-          )}
+          ) : null}
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Usuário</Text>
+            <Text style={styles.label}>Matrícula</Text>
             <TextInput
               style={styles.input}
-              placeholder="Digite seu usuário..."
+              placeholder="Digite sua matrícula"
               placeholderTextColor={Colors.grayText}
               autoCapitalize="none"
-              value={usuario}
-              onChangeText={setUsuario}
+              autoCorrect={false}
+              keyboardType="number-pad"
+              returnKeyType="next"
+              value={matricula}
+              onChangeText={setMatricula}
             />
           </View>
 
@@ -89,29 +201,31 @@ export default function Login() {
             <Text style={styles.label}>Senha</Text>
             <TextInput
               style={styles.input}
-              placeholder="Digite sua senha..."
+              placeholder="Digite sua senha"
               placeholderTextColor={Colors.grayText}
               secureTextEntry
+              returnKeyType="done"
               value={senha}
               onChangeText={setSenha}
+              onSubmitEditing={handleLogin}
             />
           </View>
 
-          <TouchableOpacity
-            style={styles.button}
-            onPress={handleLogin}
-            disabled={isLoading}
-          >
+          <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={isLoading}>
             {isLoading ? (
               <ActivityIndicator color={Colors.white} />
             ) : (
               <Text style={styles.buttonText}>Entrar</Text>
             )}
           </TouchableOpacity>
-        </View>
+
+          <Text style={styles.hint}>
+            Primeiro acesso precisa de internet. Depois a matrícula fica disponível offline neste aparelho.
+          </Text>
+        </Animated.View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Versão 1.0.0 (React Native)</Text>
+          <Text style={styles.footerText}>Versão 1.0.2</Text>
           <Text style={styles.footerCompany}>Vila Nova Agroindustrial S/A</Text>
         </View>
       </ScrollView>
@@ -122,135 +236,211 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#084C35', // Solid Premium Dark Green background
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? 430 : undefined,
+    alignSelf: 'center',
+    backgroundColor: Colors.greenInstitutional,
+    overflow: 'hidden',
+  },
+  fieldPattern: {
+    position: 'absolute',
+    left: -28,
+    right: -28,
+    top: 42,
+    height: 280,
+    justifyContent: 'space-around',
+  },
+  fieldLineWide: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    marginHorizontal: 18,
+  },
+  fieldLine: {
+    height: 1,
+    backgroundColor: 'rgba(242,181,68,0.26)',
+    marginHorizontal: 56,
+  },
+  fieldLineShort: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    marginHorizontal: 96,
   },
   scrollContainer: {
     flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+    zIndex: 1,
   },
-  badgeContainer: {
+  statusPill: {
+    alignSelf: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  badgeOnline: {
-    backgroundColor: '#10B98120',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1,
-    borderColor: '#10B981',
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    marginBottom: 26,
   },
-  badgeOffline: {
-    backgroundColor: '#EF444420',
-    borderWidth: 1,
-    borderColor: '#EF4444',
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: 'bold',
+  statusDotOnline: {
+    backgroundColor: Colors.success,
+  },
+  statusDotOffline: {
+    backgroundColor: Colors.warning,
+  },
+  statusText: {
     color: Colors.white,
-    letterSpacing: 0.5,
+    fontSize: 12,
+    fontWeight: '800',
   },
-  headerContainer: {
+  header: {
     alignItems: 'center',
-    marginBottom: 36,
+    marginBottom: 30,
   },
-  logoTitle: {
-    fontSize: 32,
+  logoStage: {
+    width: 224,
+    height: 118,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  logoPlate: {
+    position: 'absolute',
+    width: 214,
+    height: 98,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.20)',
+  },
+  logo: {
+    width: 196,
+    height: 86,
+  },
+  accentTrack: {
+    position: 'absolute',
+    bottom: 11,
+    width: 118,
+    height: 3,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  accentSweep: {
+    width: 64,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: Colors.orangeHighlight,
+  },
+  eyebrow: {
+    color: '#DCE9DD',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  title: {
+    color: Colors.white,
+    fontSize: 27,
     fontWeight: '900',
-    color: Colors.white,
-    letterSpacing: 1.5,
-  },
-  logoSubtitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.orangeInstitutional,
-    letterSpacing: 2.5,
-    marginTop: -4,
-  },
-  appTagline: {
-    fontSize: 13,
-    color: '#B2D4C8',
     marginTop: 8,
-    fontWeight: '500',
+  },
+  subtitle: {
+    color: '#DCE9DD',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
   },
   card: {
     backgroundColor: Colors.white,
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 8,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 10,
   },
   cardTitle: {
-    fontSize: 20,
-    fontWeight: '800',
     color: Colors.grayDark,
-    marginBottom: 20,
+    fontSize: 19,
+    fontWeight: '900',
+    marginBottom: 18,
     textAlign: 'center',
   },
   errorBox: {
-    backgroundColor: '#EF444415',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    backgroundColor: Colors.dangerLight,
     borderWidth: 1,
-    borderColor: '#EF444430',
+    borderColor: '#FCA5A5',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
   },
   errorText: {
     color: Colors.danger,
     fontSize: 13,
+    fontWeight: '800',
     textAlign: 'center',
-    fontWeight: '600',
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 15,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '700',
     color: Colors.grayDark,
-    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: '900',
+    marginBottom: 7,
   },
   input: {
     backgroundColor: Colors.grayLight,
     borderWidth: 1,
     borderColor: Colors.grayMedium,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 15,
+    borderRadius: 8,
     color: Colors.grayDark,
+    fontSize: 16,
+    paddingHorizontal: 15,
+    paddingVertical: 13,
   },
   button: {
-    backgroundColor: Colors.greenInstitutional,
-    borderRadius: 12,
-    paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 10,
+    backgroundColor: Colors.orangeInstitutional,
+    borderRadius: 8,
+    marginTop: 8,
+    paddingVertical: 15,
   },
   buttonText: {
     color: Colors.white,
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
+  },
+  hint: {
+    color: Colors.grayText,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 14,
+    textAlign: 'center',
   },
   footer: {
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 28,
   },
   footerText: {
-    color: '#B2D4C8',
-    fontSize: 11,
-  },
-  footerCompany: {
-    color: '#B2D4C8',
+    color: '#DCE9DD',
     fontSize: 11,
     fontWeight: '700',
-    marginTop: 2,
+  },
+  footerCompany: {
+    color: '#DCE9DD',
+    fontSize: 11,
+    fontWeight: '900',
+    marginTop: 3,
   },
 });

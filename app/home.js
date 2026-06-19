@@ -1,330 +1,353 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  FlatList,
+  ActivityIndicator,
   RefreshControl,
+  ScrollView,
   StatusBar,
-  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '../core/authStore';
-import { useSyncStore } from '../core/syncStore';
 import { AppDatabase } from '../core/database';
+import { useSyncStore } from '../core/syncStore';
 import { Colors } from '../core/colors';
-
-// Simple mapping from DB icone names to MaterialIcons
-const mapIconName = (name) => {
-  switch (name) {
-    case 'agriculture': return '🚜';
-    case 'grass': return '🌱';
-    case 'factory': return '🏭';
-    case 'health-and-safety':
-    case 'health_and_safety': return '🛡️';
-    case 'build': return '🔧';
-    case 'local-shipping':
-    case 'local_shipping': return '🚚';
-    case 'warehouse': return '📦';
-    case 'business': return '🏢';
-    default: return '📄';
-  }
-};
+import { Chip, IconBox, ScreenShell, chromeStyles } from '../components/PrototypeChrome';
 
 export default function Home() {
   const router = useRouter();
-  const { userName, cargo, logout } = useAuthStore();
-  const { queue, lastSyncLabel, loadQueue } = useSyncStore();
-
-  const [areas, setAreas] = useState([]);
+  const { queue, isQueueLoading, lastSyncLabel, loadQueue } = useSyncStore();
   const [refreshing, setRefreshing] = useState(false);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(true);
+  const [summary, setSummary] = useState({ total: 0, synced: 0, pending: 0, failed: 0 });
+  const [isOnline, setIsOnline] = useState(true);
 
-  const fetchHomeData = useCallback(() => {
+  const fetchHomeData = useCallback(async () => {
+    setIsSummaryLoading(true);
     try {
-      // 1. Fetch areas from database
-      const dbAreas = AppDatabase.getAll("SELECT * FROM areas WHERE ativo = 1 ORDER BY ordem ASC");
-      
-      // 2. Count active forms for each area
-      const mapped = dbAreas.map((area) => {
-        const formCountRes = AppDatabase.getFirst(
-          "SELECT COUNT(*) as count FROM formularios WHERE area_id = ? AND ativo = 1",
-          [area.id]
-        );
-        return {
-          ...area,
-          formCount: formCountRes ? formCountRes.count : 0,
-        };
-      });
+      await loadQueue();
+      const respostas = AppDatabase.getAll('SELECT * FROM respostas ORDER BY criado_em DESC');
+      const coletaQueue = queue.filter((item) => item.tipo !== 'anexo');
+      const synced = respostas.filter((item) => item.status === 'sincronizado').length;
+      const failed = respostas.filter((item) => item.status === 'erro').length;
+      const pending = respostas.filter((item) => item.status === 'pendente').length;
 
-      setAreas(mapped);
-      // 3. Load sync queue count
-      loadQueue();
-    } catch (e) {
-      console.error('Error fetching home data:', e);
+      setSummary({
+        total: respostas.length,
+        synced,
+        pending: pending || coletaQueue.length,
+        failed,
+      });
+    } catch (_) {
+      setSummary({ total: 0, synced: 0, pending: queue.filter((item) => item.tipo !== 'anexo').length, failed: 0 });
+    } finally {
+      setIsSummaryLoading(false);
     }
-  }, [loadQueue]);
+  }, [loadQueue, queue.length]);
 
   useEffect(() => {
     fetchHomeData();
   }, [fetchHomeData]);
 
+  useEffect(() => {
+    const applyNetworkState = (state) => {
+      setIsOnline(Boolean(state.isConnected) && state.isInternetReachable !== false);
+    };
+
+    NetInfo.fetch().then(applyNetworkState);
+    const unsubscribe = NetInfo.addEventListener(applyNetworkState);
+    return () => unsubscribe();
+  }, []);
+
   const onRefresh = async () => {
     setRefreshing(true);
-    fetchHomeData();
+    await fetchHomeData();
     setRefreshing(false);
   };
 
-  const handleLogout = async () => {
-    await logout();
-    router.replace('/login');
-  };
-
-  const pendingCount = queue.length;
-  const shortName = userName ? userName.split(' ')[0] : 'Colaborador';
+  const isDataLoading = isSummaryLoading || isQueueLoading;
+  const syncRatio = Math.min(100, Math.round((summary.synced / Math.max(summary.total, 1)) * 100));
+  const operationDate = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.greenDark} />
-      
-      {/* Premium Header Layout */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Olá, {shortName} 👋</Text>
-          <Text style={styles.cargo}>{cargo || 'Assistente Administrativo'}</Text>
-        </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => router.push('/historico')}
-            accessibilityLabel="Histórico"
-          >
-            <Text style={styles.headerButtonText}>⏳</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => router.push('/sync')}
-            accessibilityLabel="Sincronização"
-          >
-            <Text style={styles.headerButtonText}>☁️</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.headerButton, styles.logoutButton]}
-            onPress={handleLogout}
-            accessibilityLabel="Sair"
-          >
-            <Text style={styles.headerButtonText}>🚪</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
+    <ScreenShell title="Operação de Campo" activeNav="home">
+      <StatusBar barStyle="dark-content" backgroundColor="#F7FAF6" />
       <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.greenInstitutional]} />
-        }
+        contentContainerStyle={styles.scroll}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.greenInstitutional]} />}
       >
-        {/* Sync Status Banner */}
-        <View style={styles.banner}>
-          <View style={styles.bannerContent}>
-            <Text style={styles.bannerSubtitle}>Status do Sistema</Text>
-            <Text style={styles.bannerTitle}>
-              {pendingCount} registros pendentes
-            </Text>
-            <Text style={styles.bannerSyncLabel}>
-              Último sync: {lastSyncLabel}
-            </Text>
+        <View style={styles.statusCard}>
+          <View style={styles.statusHeader}>
+            <Chip>{isOnline ? 'Online' : 'Offline pronto'}</Chip>
+            <Text style={styles.statusPeriod}>Junho</Text>
           </View>
-          <View style={styles.bannerIconContainer}>
-            <Text style={styles.bannerIcon}>
-              {pendingCount > 0 ? '📤' : '✅'}
-            </Text>
+
+          <View style={styles.statusMain}>
+            <View style={styles.statusTextBlock}>
+              <Text style={styles.statusTitle}>Resumo mensal</Text>
+              {isDataLoading ? (
+                <View style={styles.statusLoadingLine}>
+                  <ActivityIndicator color={Colors.white} size="small" />
+                  <Text style={styles.statusLoadingText}>Carregando</Text>
+                </View>
+              ) : (
+                <Text style={styles.statusNumber}>{summary.total}</Text>
+              )}
+              <Text style={styles.statusCaption}>coletas registradas</Text>
+            </View>
+            <View style={styles.ring}>
+              {isDataLoading ? <ActivityIndicator color={Colors.white} size="small" /> : <Text style={styles.ringValue}>{syncRatio}%</Text>}
+              <Text style={styles.ringLabel}>sinc.</Text>
+            </View>
+          </View>
+
+          <View style={styles.metrics}>
+            <View style={styles.metricBox}>
+              {isDataLoading ? <ActivityIndicator color={Colors.white} size="small" /> : <Text style={styles.metricNumber}>{summary.synced}</Text>}
+              <Text style={styles.metricLabel}>sincronizadas</Text>
+            </View>
+            <View style={styles.metricBox}>
+              {isDataLoading ? <ActivityIndicator color={Colors.white} size="small" /> : <Text style={styles.metricNumber}>{summary.failed}</Text>}
+              <Text style={styles.metricLabel}>não sinc.</Text>
+            </View>
+            <View style={styles.metricBox}>
+              {isDataLoading ? <ActivityIndicator color={Colors.white} size="small" /> : <Text style={styles.metricNumber}>{summary.pending}</Text>}
+              <Text style={styles.metricLabel}>pendentes</Text>
+            </View>
+          </View>
+
+          <View style={styles.statusFooter}>
+            <Text style={styles.statusFooterText}>Última sinc. {lastSyncLabel}</Text>
+            <Text style={styles.statusFooterText}>Modo local ativo</Text>
           </View>
         </View>
 
-        {/* Section title */}
-        <Text style={styles.sectionTitle}>Áreas Operacionais</Text>
-
-        {/* Operational Areas Grid */}
-        <View style={styles.grid}>
-          {areas.map((area) => (
-            <TouchableOpacity
-              key={area.id}
-              style={styles.card}
-              onPress={() =>
-                router.push({
-                  pathname: `/formularios/${area.id}`,
-                  params: { nome: area.nome },
-                })
-              }
-            >
-              <View
-                style={[
-                  styles.iconBox,
-                  { backgroundColor: `${area.cor}15` }, // Hex with opacity
-                ]}
-              >
-                <Text style={[styles.cardIcon, { color: area.cor }]}>
-                  {mapIconName(area.icone)}
-                </Text>
-              </View>
-              <Text style={styles.cardName}>{area.nome}</Text>
-              <Text style={styles.cardCount}>{area.formCount} formulários</Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.overview}>
+          <View style={styles.overviewCard}>
+            <IconBox name="calendar-month-outline" />
+            <View style={styles.overviewText}>
+              <Text style={styles.overviewLabel}>Operação</Text>
+              <Text style={styles.overviewValue}>{operationDate}</Text>
+            </View>
+          </View>
+          <View style={styles.overviewCard}>
+            <IconBox name="axis-arrow" amber />
+            <View style={styles.overviewText}>
+              <Text style={styles.overviewLabel}>Fila local</Text>
+              <Text style={styles.overviewValue}>
+                {isQueueLoading ? 'Carregando...' : `${queue.filter((item) => item.tipo !== 'anexo').length} pendentes`}
+              </Text>
+            </View>
+          </View>
         </View>
-        <View style={styles.paddingBottom} />
+
+        <View style={styles.quickGrid}>
+          <QuickAction icon="format-list-bulleted" label="Formulários" onPress={() => router.push('/formularios/campo')} />
+          <QuickAction icon="history" label="Histórico" onPress={() => router.push('/historico')} />
+          <QuickAction icon="sync" label="Sinc." onPress={() => router.push('/sync')} />
+        </View>
       </ScrollView>
-    </View>
+    </ScreenShell>
+  );
+}
+
+function QuickAction({ icon, label, onPress }) {
+  return (
+    <TouchableOpacity style={styles.quickAction} onPress={onPress}>
+      <View style={styles.quickIcon}>
+        <MaterialCommunityIcons name={icon} size={22} color={Colors.greenDark} />
+      </View>
+      <Text style={styles.quickLabel}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  scroll: {
+    padding: chromeStyles.screenPadding,
+    paddingBottom: chromeStyles.bottomPadding,
   },
-  header: {
+  statusCard: {
+    overflow: 'hidden',
+    gap: 15,
+    padding: 17,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 8,
     backgroundColor: Colors.greenInstitutional,
-    paddingTop: Platform.OS === 'ios' ? 54 : 32,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
+    shadowColor: Colors.greenInstitutional,
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.18,
+    shadowRadius: 34,
+    elevation: 5,
+  },
+  statusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statusPeriod: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  statusMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  statusTextBlock: {
+    flex: 1,
+  },
+  statusTitle: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  statusNumber: {
+    color: Colors.white,
+    fontSize: 54,
+    lineHeight: 58,
+    fontWeight: '900',
+    marginTop: 3,
+  },
+  statusLoadingLine: {
+    minHeight: 61,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginTop: 3,
+  },
+  statusLoadingText: {
+    color: Colors.white,
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  statusCaption: {
+    color: 'rgba(255,255,255,0.76)',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  ring: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  ringValue: {
+    color: Colors.white,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  ringLabel: {
+    color: 'rgba(255,255,255,0.74)',
+    fontSize: 10,
+    fontWeight: '900',
+    marginTop: -2,
+  },
+  metrics: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  metricBox: {
+    flex: 1,
+    minHeight: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  metricNumber: {
+    color: Colors.white,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  metricLabel: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 10,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  statusFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    gap: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.13)',
   },
-  greeting: {
-    fontSize: 20,
+  statusFooterText: {
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 11,
     fontWeight: '800',
-    color: Colors.white,
-    fontFamily: 'System',
   },
-  cargo: {
-    fontSize: 12,
-    color: '#B2D4C8',
-    fontWeight: '600',
+  overview: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  overviewCard: {
+    flex: 1,
+    minHeight: 70,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(32,49,37,0.08)',
+    borderRadius: 8,
+    backgroundColor: Colors.white,
+  },
+  overviewText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  overviewLabel: {
+    color: Colors.grayText,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  overviewValue: {
+    color: '#17221B',
+    fontSize: 14,
+    fontWeight: '900',
     marginTop: 2,
   },
-  headerActions: {
+  quickGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: 10,
+    marginTop: 12,
   },
-  headerButton: {
+  quickAction: {
+    flex: 1,
+    minHeight: 96,
+    justifyContent: 'space-between',
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(32,49,37,0.08)',
+    borderRadius: 8,
+    backgroundColor: Colors.white,
+  },
+  quickIcon: {
     width: 38,
     height: 38,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.greenLight,
   },
-  logoutButton: {
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
-  },
-  headerButtonText: {
-    fontSize: 18,
-  },
-  scrollContainer: {
-    padding: 16,
-  },
-  banner: {
-    borderRadius: 16,
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.greenInstitutional,
-    marginBottom: 24,
-    shadowColor: Colors.greenInstitutional,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  bannerContent: {
-    flex: 1,
-  },
-  bannerSubtitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#B2D4C8',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  bannerTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: Colors.white,
-    marginTop: 4,
-  },
-  bannerSyncLabel: {
-    fontSize: 11,
-    color: '#B2D4C8',
-    marginTop: 6,
-  },
-  bannerIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bannerIcon: {
-    fontSize: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+  quickLabel: {
     color: Colors.grayDark,
-    marginBottom: 16,
-    paddingLeft: 4,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  card: {
-    width: '48%',
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  iconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  cardIcon: {
-    fontSize: 24,
-  },
-  cardName: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: Colors.grayDark,
-  },
-  cardCount: {
-    fontSize: 12,
-    color: Colors.grayText,
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  paddingBottom: {
-    height: 60,
+    fontSize: 13,
+    fontWeight: '900',
   },
 });

@@ -1,22 +1,23 @@
 export const Colors = {
   // Brand Colors
-  greenInstitutional: '#0B6B4A',
-  greenDark: '#084C35',
-  greenLight: '#E8F5EE',
-  orangeInstitutional: '#F05A00',
-  orangeHighlight: '#FF6B00',
-  orangeLight: '#FFF0E6',
+  greenInstitutional: '#234F2A',
+  greenDark: '#1B3D20',
+  greenLight: '#EAF2EA',
+  orangeInstitutional: '#D98C10',
+  orangeHighlight: '#F2B544',
+  orangeDark: '#B36F00',
+  orangeLight: '#FFF4DF',
 
   // Neutrals
   white: '#FFFFFF',
-  grayLight: '#F5F7F9',
-  grayMedium: '#E2E8F0',
-  grayText: '#64748B',
-  grayDark: '#2E2E2E',
+  grayLight: '#F8F8F5',
+  grayMedium: '#E5E7E0',
+  grayText: '#6B7280',
+  grayDark: '#1F2937',
   black: '#0A0A0A',
 
   // Status
-  success: '#10B981',
+  success: '#22C55E',
   successLight: '#D1FAE5',
   warning: '#F59E0B',
   warningLight: '#FEF3C7',
@@ -27,6 +28,6 @@ export const Colors = {
 
   // UI Surfaces
   surface: '#FFFFFF',
-  background: '#F5F7F9',
-  cardBorder: '#E2E8F0',
+  background: '#F8F8F5',
+  cardBorder: '#E5E7E0',
 };

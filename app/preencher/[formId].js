@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
+  Animated,
   View,
   Text,
   StyleSheet,
@@ -49,22 +50,11 @@ import { captureImageWithGps } from '../../core/mediaCapture';
 
 const hasFilledValue = (value) => {
   if (Array.isArray(value)) {
-    return value.some((row) => (
-      row
-      && Object.values(row).some((cellValue) => (
-        cellValue !== null
-        && cellValue !== undefined
-        && cellValue.toString().trim().length > 0
-      ))
-    ));
+    return value.some((item) => hasFilledValue(item));
   }
 
-  if (typeof value === 'object') {
-    return Object.values(value).some((cellValue) => (
-      cellValue !== null
-      && cellValue !== undefined
-      && cellValue.toString().trim().length > 0
-    ));
+  if (value && typeof value === 'object') {
+    return Object.values(value).some((cellValue) => hasFilledValue(cellValue));
   }
 
   return value !== null
@@ -97,6 +87,38 @@ const sumRows = (rows, fieldIds) => {
   }, 0);
 };
 
+const formatMatriculasAvaliadores = (values) => (
+  [values.matricula_avaliador, values.matricula_avaliador_2]
+    .filter((item) => item && item.toString().trim().length > 0)
+    .join(' / ')
+);
+
+const observacaoTexto = (value) => (
+  value && typeof value === 'object' ? value.texto || '' : value || ''
+);
+
+const observacaoFotos = (values) => {
+  const value = values?.observacao;
+  return value && typeof value === 'object' && Array.isArray(value.fotos)
+    ? value.fotos
+    : [];
+};
+
+const cachoTotalRows = (rows) => sumRows(rows, [
+  'cacho_esquecido_ciclo',
+  'cacho_esquecido',
+  'cacho_verde',
+  'cacho_maduro',
+  'cacho_passado',
+  'cacho_infermo',
+  'bucha',
+  'cacho_talo_comprido',
+  'cacho_estrela',
+  'cachos_estrela',
+  'cacho_avermelhado',
+  'cachos_avermelhados',
+]);
+
 const buildCqoCorteLegacyPayload = (formId, values) => {
   if (formId !== 'form_cqo_corte') return null;
 
@@ -116,19 +138,23 @@ const buildCqoCorteLegacyPayload = (formId, values) => {
       Parcela: values.parcela || null,
       DataAvaliacao: values.data_avaliacao || null,
       ciclo_mes: values.ciclo_mes || null,
-      MatriculaAvaliadores: values.matricula_avaliador || null,
+      MatriculaAvaliadores: formatMatriculasAvaliadores(values) || null,
+      MatriculaAvaliador2: values.matricula_avaliador_2 || null,
       'Fiscal Resp': values.fiscal_resp || null,
+      'Fiscal Resp Equipe': values.fiscal_resp_equipe || null,
       MatriculaDigitador: values.matricula_avaliador || null,
-      Observacao: values.observacao || null,
+      Observacao: observacaoTexto(values.observacao) || null,
       Acompanhamento: values.acompanhamento || null,
     },
     previa_agregada_linhas: {
       NumeroPlantasObservadas: sumRows(rows, ['numero_plantas_observadas', 'numero_na_linha']),
-      NumeroCahosObservadosPapel: sumRows(rows, ['numero_cachos_observados_papel', 'numero_cacho_observado']),
+      NumeroCahosObservadosPapel: cachoTotalRows(rows),
       CachoEsquecidoCiclo: sumRows(rows, ['cacho_esquecido_ciclo', 'cacho_esquecido']),
       CachoVerde: sumRows(rows, ['cacho_verde']),
       CachoMaduro: sumRows(rows, ['cacho_maduro']),
       CachoPassado: sumRows(rows, ['cacho_passado']),
+      CachoInfermo: sumRows(rows, ['cacho_infermo']),
+      Bucha: sumRows(rows, ['bucha']),
       FolhaMamando: sumRows(rows, ['folha_mamando']),
       CachoTaloComprido: sumRows(rows, ['cacho_talo_comprido']),
       folhaCortadaIndev: sumRows(rows, ['folha_cortada_indevida']),
@@ -136,11 +162,9 @@ const buildCqoCorteLegacyPayload = (formId, values) => {
       CachoEstrela: sumRows(rows, ['cacho_estrela', 'cachos_estrela']),
       CachoBrocado: sumRows(rows, ['cacho_brocado', 'cachos_brocados']),
       CachoAvermelhado: sumRows(rows, ['cacho_avermelhado', 'cachos_avermelhados']),
-      FrutoSolto: sumRows(rows, ['fruto_solto']),
-      'Ciclo FrutoSolto': sumRows(rows, ['ciclo_fruto_solto']),
     },
     formulas_referencia_nao_autoritativas: {
-      NumeroCahosObservados: 'CachoVerde + CachoMaduro + CachoPassado + CachoAvermelhado',
+      NumeroCahosObservados: 'Soma dos tipos de cacho achados, exceto CachoBrocado e Palha mal posicionada',
       'estimativa de cacho perdido/pla': 'CachoEsquecidoCiclo / NumeroPlantasObservadas * N de plantas Atual',
       'perdas t': 'estimativa de cacho perdido/pla * Peso Kg CORTE / 1000',
     },
@@ -172,10 +196,12 @@ const buildCqoCarreamentoLegacyPayload = (formId, values) => {
       Variedade: values.variedade || null,
       DataAvaliacao: values.data_avaliacao || null,
       Ciclo_mes: values.ciclo_mes || null,
-      MatriculaAvaliadores: values.matricula_avaliador || null,
+      MatriculaAvaliadores: formatMatriculasAvaliadores(values) || null,
+      MatriculaAvaliador2: values.matricula_avaliador_2 || null,
       'Fiscal Resp': values.fiscal_resp || null,
+      'Fiscal Resp Equipe': values.fiscal_resp_equipe || null,
       MatriculaDigitador: values.matricula_avaliador || null,
-      Observacao: values.observacao || null,
+      Observacao: observacaoTexto(values.observacao) || null,
       Acompanhamento: values.acompanhamento || null,
     },
     previa_agregada_linhas: {
@@ -204,10 +230,87 @@ const GPS_TRACK_DISTANCE_METERS = 10;
 const GPS_TRACK_INTERVAL_MS = 15000;
 const GPS_TRACK_MAX_POINTS = 1200;
 const GPS_OCCURRENCE_TIMEOUT_MS = 6500;
+const DRAFT_SAVE_DELAY_MS = 700;
+const SAVE_SUCCESS_FEEDBACK_MS = 1200;
+const DRAFT_KEY_PREFIX = 'draft_formulario_';
 
 const createGpsSessionId = () => (
   `gpssess_${Date.now()}_${Math.floor(Math.random() * 1000)}`
 );
+
+const draftKeyFor = (formId) => `${DRAFT_KEY_PREFIX}${formId}`;
+
+const initialValuesForFields = (fields) => {
+  const initialValues = {};
+  fields.forEach((field) => {
+    if (['linhas_cqo_corte', 'linhas_cqo_carreamento'].includes(field.tipo)) {
+      initialValues[field.id] = initialLineValue(field.tipo);
+    } else if (field.tipo === 'acompanhamento') {
+      initialValues[field.id] = { teve: 'nao', matricula: '', nome: '' };
+    } else {
+      initialValues[field.id] = '';
+    }
+  });
+  return initialValues;
+};
+
+const readDraft = (formId) => {
+  if (!formId) return null;
+  const key = draftKeyFor(formId);
+
+  try {
+    if (Platform.OS === 'web') {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    }
+
+    const row = AppDatabase.getFirst('SELECT valor FROM app_meta WHERE chave = ?', [key]);
+    return row?.valor ? JSON.parse(row.valor) : null;
+  } catch (error) {
+    console.warn('Draft read unavailable:', error);
+    return null;
+  }
+};
+
+const writeDraft = (formId, payload) => {
+  if (!formId) return;
+  const key = draftKeyFor(formId);
+  const now = new Date().toISOString();
+  const value = JSON.stringify({
+    ...payload,
+    atualizado_em: now,
+  });
+
+  try {
+    if (Platform.OS === 'web') {
+      localStorage.setItem(key, value);
+      return;
+    }
+
+    AppDatabase.run(
+      'INSERT OR REPLACE INTO app_meta (chave, valor, atualizado_em) VALUES (?, ?, ?)',
+      [key, value, now]
+    );
+  } catch (error) {
+    console.warn('Draft write unavailable:', error);
+  }
+};
+
+const clearDraft = (formId) => {
+  if (!formId) return;
+  const key = draftKeyFor(formId);
+
+  try {
+    if (Platform.OS === 'web') {
+      localStorage.removeItem(key);
+      return;
+    }
+
+    AppDatabase.run('DELETE FROM app_meta WHERE chave = ?', [key]);
+  } catch (error) {
+    console.warn('Draft clear unavailable:', error);
+  }
+};
 
 async function withTimeout(promise, timeoutMs) {
   let timeoutId;
@@ -279,7 +382,10 @@ const getCqoGpsOccurrences = (values) => {
         id: `${occurrence.id || `occ_${rowIndex}`}_${quantityIndex + 1}`,
         quantidade: 1,
         linha_index: rowIndex + 1,
-        linha: occurrence.linha || row?.linha || String(rowIndex + 1),
+        rua_index: occurrence.rua_index || row?.rua_index || Math.floor(rowIndex / 2) + 1,
+        lado_linha: occurrence.lado_linha || row?.lado_linha || (rowIndex % 2) + 1,
+        linha: occurrence.linha || row?.linha || '',
+        matricula_colaborador: occurrence.matricula_colaborador || row?.matricula_colaborador || null,
       }));
     });
   });
@@ -292,31 +398,56 @@ const getCqoLineEvidences = (values) => {
   ];
 
   return rows.flatMap((row, rowIndex) => {
-    const photo = row?.evidencia_foto;
-    if (!photo) return [];
-    return [{
+    const legacyPhotos = row?.evidencia_foto ? [{
+      ...row.evidencia_foto,
+      campo_id: 'foto_linha',
+      titulo: 'Foto da linha',
+    }] : [];
+    const groupedPhotos = row?._evidencias_fotos && typeof row._evidencias_fotos === 'object'
+      ? Object.entries(row._evidencias_fotos).flatMap(([fieldId, photos]) => (
+        Array.isArray(photos)
+          ? photos.map((photo) => ({
+            ...photo,
+            campo_id: photo.campo_id || fieldId,
+          }))
+          : []
+      ))
+      : [];
+
+    return [...legacyPhotos, ...groupedPhotos].map((photo) => ({
       ...photo,
       linha_index: rowIndex + 1,
-      linha: row?.linha || String(rowIndex + 1),
-    }];
+      rua_index: photo?.rua_index || row?.rua_index || Math.floor(rowIndex / 2) + 1,
+      lado_linha: photo?.lado_linha || row?.lado_linha || (rowIndex % 2) + 1,
+      linha: photo?.linha || row?.linha || '',
+      matricula_colaborador: row?.matricula_colaborador || null,
+    }));
   });
 };
 
 const initialLineValue = (fieldType) => {
   if (fieldType === 'linhas_cqo_carreamento') {
-    return [{
+    const createCarreamentoLine = (ruaIndex, ladoLinha) => ({
+      rua_index: ruaIndex,
+      lado_linha: ladoLinha,
       linha: '',
       numero_plantas_linha: '',
       cacho_mal_posicionado: '',
       cacho_nao_carreado: '',
-      numero_plantas_observadas: '',
-      peso_medio: '',
-    }];
+    });
+
+    return [
+      createCarreamentoLine(1, 1),
+      createCarreamentoLine(1, 2),
+    ];
   }
 
   if (fieldType === 'linhas_cqo_corte') {
-    return [{
+    const createCorteLine = (ruaIndex, ladoLinha) => ({
+      rua_index: ruaIndex,
+      lado_linha: ladoLinha,
       linha: '',
+      matricula_colaborador: '',
       numero_plantas_linha: '',
       numero_plantas_observadas: '',
       numero_cachos_observados_papel: '',
@@ -324,6 +455,8 @@ const initialLineValue = (fieldType) => {
       cacho_verde: '',
       cacho_maduro: '',
       cacho_passado: '',
+      cacho_infermo: '',
+      bucha: '',
       folha_mamando: '',
       cacho_talo_comprido: '',
       folha_cortada_indevida: '',
@@ -331,9 +464,14 @@ const initialLineValue = (fieldType) => {
       cacho_estrela: '',
       cacho_brocado: '',
       cacho_avermelhado: '',
-      fruto_solto: '',
-      ciclo_fruto_solto: '',
-    }];
+      _plantas_cacho_esquecido: [],
+      _evidencias_fotos: {},
+    });
+
+    return [
+      createCorteLine(1, 1),
+      createCorteLine(1, 2),
+    ];
   }
 
   return [];
@@ -341,8 +479,9 @@ const initialLineValue = (fieldType) => {
 
 export default function FormularioPreencher() {
   const router = useRouter();
-  const { formId, titulo } = useLocalSearchParams();
+  const { formId, titulo, respostaId } = useLocalSearchParams();
   const currentFormId = Array.isArray(formId) ? formId[0] : formId;
+  const currentRespostaId = Array.isArray(respostaId) ? respostaId[0] : respostaId;
 
   const [form, setForm] = useState(null);
   const [campos, setCampos] = useState([]);
@@ -354,35 +493,48 @@ export default function FormularioPreencher() {
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [gpsTrack, setGpsTrack] = useState([]);
   const [isTrackingGps, setIsTrackingGps] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState(null);
+  const [saveFeedback, setSaveFeedback] = useState(null);
 
   const scrollRef = useRef(null);
+  const saveFeedbackAnim = useRef(new Animated.Value(0)).current;
   const gpsWatchRef = useRef(null);
   const lastGpsPointRef = useRef(null);
   const gpsSessionIdRef = useRef(createGpsSessionId());
+  const hasUserEditedRef = useRef(false);
+  const draftReadyRef = useRef(false);
 
   useEffect(() => {
     try {
+      draftReadyRef.current = false;
+      hasUserEditedRef.current = false;
+      setDraftSavedAt(null);
       const result = AppDatabase.getFirst('SELECT * FROM formularios WHERE id = ?', [currentFormId]);
       if (result) {
         setForm(result);
         const parsedCampos = JSON.parse(result.campos_json);
         setCampos(parsedCampos);
 
-        // Initialize values map
-        const initialValues = {};
-        parsedCampos.forEach((field) => {
-          if (['linhas_cqo_corte', 'linhas_cqo_carreamento'].includes(field.tipo)) {
-            initialValues[field.id] = initialLineValue(field.tipo);
-          } else if (field.tipo === 'acompanhamento') {
-            initialValues[field.id] = { teve: 'nao', matricula: '', nome: '' };
-          } else {
-            initialValues[field.id] = '';
-          }
-        });
-        setFormValues(initialValues);
-        setGpsTrack([]);
-        gpsSessionIdRef.current = createGpsSessionId();
-        lastGpsPointRef.current = null;
+        const initialValues = initialValuesForFields(parsedCampos);
+        const existingResponse = currentRespostaId
+          ? AppDatabase.getFirst('SELECT * FROM respostas WHERE id = ?', [currentRespostaId])
+          : null;
+        const existingValues = existingResponse?.dados_json ? JSON.parse(existingResponse.dados_json) : null;
+        const draft = currentRespostaId ? null : readDraft(currentFormId);
+        const draftValues = draft?.values && typeof draft.values === 'object'
+          ? { ...initialValues, ...draft.values }
+          : existingValues && typeof existingValues === 'object'
+            ? { ...initialValues, ...existingValues }
+          : initialValues;
+        const draftTrack = Array.isArray(draft?.gpsTrack) ? draft.gpsTrack : [];
+
+        setFormValues(draftValues);
+        setGpsTrack(draftTrack);
+        gpsSessionIdRef.current = draft?.session_id || createGpsSessionId();
+        lastGpsPointRef.current = draftTrack[draftTrack.length - 1] || null;
+        setDraftSavedAt(draft?.atualizado_em || null);
+        hasUserEditedRef.current = false;
+        draftReadyRef.current = true;
       }
     } catch (e) {
       console.error('Error loading form template:', e);
@@ -390,7 +542,52 @@ export default function FormularioPreencher() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentFormId]);
+  }, [currentFormId, currentRespostaId]);
+
+  useEffect(() => {
+    if (isLoading || !draftReadyRef.current || !hasUserEditedRef.current) {
+      return undefined;
+    }
+
+    const payload = {
+      values: formValues,
+      gpsTrack,
+      session_id: gpsSessionIdRef.current,
+    };
+
+    const saveDraft = (updateState = true) => {
+      const savedAt = new Date().toISOString();
+      writeDraft(currentFormId, payload);
+      if (updateState) setDraftSavedAt(savedAt);
+    };
+
+    const timer = setTimeout(saveDraft, DRAFT_SAVE_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      saveDraft(false);
+    };
+  }, [currentFormId, formValues, gpsTrack, isLoading]);
+
+  useEffect(() => {
+    if (!saveFeedback) return undefined;
+
+    saveFeedbackAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(saveFeedbackAnim, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+      Animated.delay(SAVE_SUCCESS_FEEDBACK_MS),
+      Animated.timing(saveFeedbackAnim, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setSaveFeedback(null));
+
+    return undefined;
+  }, [saveFeedback, saveFeedbackAnim]);
 
   useEffect(() => {
     const applyNetworkState = (state) => {
@@ -606,6 +803,7 @@ export default function FormularioPreencher() {
   };
 
   const handleValueChange = (fieldId, val) => {
+    hasUserEditedRef.current = true;
     setFormValues((prev) => {
       const nextValues = {
         ...prev,
@@ -676,7 +874,7 @@ export default function FormularioPreencher() {
       const userRes = AppDatabase.getFirst('SELECT id FROM usuarios LIMIT 1');
       const userId = userRes ? userRes.id : `offline_uid_${Date.now()}`;
 
-      const respostaId = `res_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      const respostaIdFinal = currentRespostaId || `res_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
       const dateStr = new Date().toISOString();
       const mapeamentoLegado = buildLegacyPayload(currentFormId, formValues);
       const gpsTrackPayload = gpsTrack.map((point, index) => ({
@@ -702,9 +900,16 @@ export default function FormularioPreencher() {
         },
       };
 
+      if (currentRespostaId) {
+        AppDatabase.run('DELETE FROM sync_queue WHERE referencia_id = ?', [currentRespostaId]);
+        AppDatabase.run('DELETE FROM anexos WHERE resposta_id = ?', [currentRespostaId]);
+        AppDatabase.run('DELETE FROM gps WHERE resposta_id = ?', [currentRespostaId]);
+        AppDatabase.run('DELETE FROM assinaturas WHERE resposta_id = ?', [currentRespostaId]);
+      }
+
       // 1. Save response in respuestas table
       AppDatabase.insert('respostas', {
-        id: respostaId,
+        id: respostaIdFinal,
         formulario_id: currentFormId,
         usuario_id: userId,
         dados_json: JSON.stringify(valuesForSave),
@@ -725,7 +930,7 @@ export default function FormularioPreencher() {
 
           AppDatabase.insert('anexos', {
             id: `anexo_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-            resposta_id: respostaId,
+            resposta_id: respostaIdFinal,
             campo_id: field.id,
             caminho_local: photoUri,
             nome_arquivo: photoUri.split('/').pop() || 'photo.jpg',
@@ -738,7 +943,7 @@ export default function FormularioPreencher() {
           if (val?.gps) {
             AppDatabase.insert('gps', {
               id: `gps_foto_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-              resposta_id: respostaId,
+              resposta_id: respostaIdFinal,
               campo_id: field.id,
               latitude: val.gps.latitude,
               longitude: val.gps.longitude,
@@ -750,7 +955,7 @@ export default function FormularioPreencher() {
         } else if (field.tipo === 'assinatura') {
           AppDatabase.insert('assinaturas', {
             id: `sig_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-            resposta_id: respostaId,
+            resposta_id: respostaIdFinal,
             campo_id: field.id,
             caminho_png: textVal,
             enviado: 0,
@@ -761,7 +966,7 @@ export default function FormularioPreencher() {
           if (parsedGps) {
             AppDatabase.insert('gps', {
               id: `gps_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-              resposta_id: respostaId,
+              resposta_id: respostaIdFinal,
               campo_id: field.id,
               latitude: parsedGps.latitude,
               longitude: parsedGps.longitude,
@@ -776,7 +981,7 @@ export default function FormularioPreencher() {
       gpsTrackPayload.forEach((point) => {
         AppDatabase.insert('gps', {
           id: `gps_track_${Date.now()}_${point.ordem}_${Math.floor(Math.random() * 1000)}`,
-          resposta_id: respostaId,
+          resposta_id: respostaIdFinal,
           campo_id: 'gps_track',
           latitude: point.latitude,
           longitude: point.longitude,
@@ -787,10 +992,11 @@ export default function FormularioPreencher() {
       });
 
       cqoGpsOccurrences.forEach((occurrence, index) => {
+        const occurrenceLocationId = occurrence.linha || `rua_${occurrence.rua_index || occurrence.linha_index || index + 1}_lado_${occurrence.lado_linha || 1}`;
         AppDatabase.insert('gps', {
           id: `gps_ocorrencia_${Date.now()}_${index + 1}_${Math.floor(Math.random() * 1000)}`,
-          resposta_id: respostaId,
-          campo_id: `ocorrencia_${occurrence.campo_id}_linha_${occurrence.linha || occurrence.linha_index || index + 1}`,
+          resposta_id: respostaIdFinal,
+          campo_id: `ocorrencia_${occurrence.campo_id}_linha_${occurrenceLocationId}`,
           latitude: occurrence.latitude,
           longitude: occurrence.longitude,
           precisao: occurrence.precisao,
@@ -800,10 +1006,14 @@ export default function FormularioPreencher() {
       });
 
       cqoLineEvidences.forEach((photo, index) => {
+        const photoCampoId = photo.campo_id || 'foto_linha';
+        const photoLocationId = photo.linha || `rua_${photo.rua_index || photo.linha_index || index + 1}_lado_${photo.lado_linha || 1}`;
+        const photoFieldId = `foto_${photoCampoId}_linha_${photoLocationId}`;
+
         AppDatabase.insert('anexos', {
           id: `anexo_linha_${Date.now()}_${index + 1}_${Math.floor(Math.random() * 1000)}`,
-          resposta_id: respostaId,
-          campo_id: `foto_linha_${photo.linha || photo.linha_index || index + 1}`,
+          resposta_id: respostaIdFinal,
+          campo_id: photoFieldId,
           caminho_local: photo.uri,
           nome_arquivo: photo.uri.split('/').pop() || 'linha.jpg',
           tamanho_bytes: 0,
@@ -815,8 +1025,37 @@ export default function FormularioPreencher() {
         if (photo.gps) {
           AppDatabase.insert('gps', {
             id: `gps_linha_${Date.now()}_${index + 1}_${Math.floor(Math.random() * 1000)}`,
-            resposta_id: respostaId,
-            campo_id: `foto_linha_${photo.linha || photo.linha_index || index + 1}`,
+            resposta_id: respostaIdFinal,
+            campo_id: photoFieldId,
+            latitude: photo.gps.latitude,
+            longitude: photo.gps.longitude,
+            precisao: photo.gps.precisao,
+            altitude: photo.gps.altitude,
+            capturado_em: photo.gps.capturado_em || photo.capturedAt || dateStr,
+          });
+        }
+      });
+
+      observacaoFotos(formValues).forEach((photo, index) => {
+        const photoFieldId = `foto_observacao_${index + 1}`;
+
+        AppDatabase.insert('anexos', {
+          id: `anexo_observacao_${Date.now()}_${index + 1}_${Math.floor(Math.random() * 1000)}`,
+          resposta_id: respostaIdFinal,
+          campo_id: photoFieldId,
+          caminho_local: photo.uri,
+          nome_arquivo: photo.uri?.split('/').pop() || `observacao_${index + 1}.jpg`,
+          tamanho_bytes: 0,
+          tipo_mime: photo.mimeType || 'image/jpeg',
+          enviado: 0,
+          criado_em: photo.capturedAt || dateStr,
+        });
+
+        if (photo.gps) {
+          AppDatabase.insert('gps', {
+            id: `gps_observacao_${Date.now()}_${index + 1}_${Math.floor(Math.random() * 1000)}`,
+            resposta_id: respostaIdFinal,
+            campo_id: photoFieldId,
             latitude: photo.gps.latitude,
             longitude: photo.gps.longitude,
             precisao: photo.gps.precisao,
@@ -830,9 +1069,9 @@ export default function FormularioPreencher() {
       AppDatabase.insert('sync_queue', {
         id: `q_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
         tipo: 'resposta',
-        referencia_id: respostaId,
+        referencia_id: respostaIdFinal,
         payload_json: JSON.stringify({
-          resposta_id: respostaId,
+          resposta_id: respostaIdFinal,
           formulario_id: currentFormId,
           formulario_versao: form?.versao || null,
           usuario_id: userId,
@@ -849,16 +1088,19 @@ export default function FormularioPreencher() {
               altitude: point.altitude,
               capturado_em: point.capturado_em || dateStr,
             })),
-            ...cqoGpsOccurrences.map((occurrence, index) => ({
-              session_id: occurrence.session_id || gpsSessionIdRef.current,
-              source: occurrence.source || 'ocorrencia',
-              campo_id: `ocorrencia_${occurrence.campo_id}_linha_${occurrence.linha || occurrence.linha_index || index + 1}`,
-              latitude: occurrence.latitude,
-              longitude: occurrence.longitude,
-              precisao: occurrence.precisao,
-              altitude: occurrence.altitude,
-              capturado_em: occurrence.capturado_em || dateStr,
-            })),
+            ...cqoGpsOccurrences.map((occurrence, index) => {
+              const occurrenceLocationId = occurrence.linha || `rua_${occurrence.rua_index || occurrence.linha_index || index + 1}_lado_${occurrence.lado_linha || 1}`;
+              return {
+                session_id: occurrence.session_id || gpsSessionIdRef.current,
+                source: occurrence.source || 'ocorrencia',
+                campo_id: `ocorrencia_${occurrence.campo_id}_linha_${occurrenceLocationId}`,
+                latitude: occurrence.latitude,
+                longitude: occurrence.longitude,
+                precisao: occurrence.precisao,
+                altitude: occurrence.altitude,
+                capturado_em: occurrence.capturado_em || dateStr,
+              };
+            }),
           ],
           criado_em: dateStr,
         }),
@@ -868,24 +1110,80 @@ export default function FormularioPreencher() {
         criado_em: dateStr,
       });
 
-      Alert.alert(
-        'Sucesso!',
-        'A coleta foi salva localmente e adicionada à fila de sincronização.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              router.back();
-            },
-          },
-        ]
-      );
+      clearDraft(currentFormId);
+      hasUserEditedRef.current = false;
+      setDraftSavedAt(null);
+      setSaveFeedback({
+        title: currentRespostaId ? 'Coleta atualizada na fila' : 'Coleta enviada para a fila',
+        subtitle: currentRespostaId ? 'Voltando para a lista de coletas.' : 'Os campos serão liberados para a próxima coleta.',
+      });
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+
+      await new Promise((resolve) => setTimeout(resolve, SAVE_SUCCESS_FEEDBACK_MS + 260));
+
+      if (currentRespostaId) {
+        router.back();
+      } else {
+        setFormValues(initialValuesForFields(campos));
+        setFormErrors({});
+        setGpsTrack([]);
+        gpsSessionIdRef.current = createGpsSessionId();
+        lastGpsPointRef.current = null;
+      }
     } catch (e) {
       console.error('Error saving collected form:', e);
       Alert.alert('Erro', `Falha ao gravar os dados: ${e.message}`);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const deleteLocalResponse = (responseId) => {
+    AppDatabase.run('DELETE FROM sync_queue WHERE referencia_id = ?', [responseId]);
+    AppDatabase.run('DELETE FROM anexos WHERE resposta_id = ?', [responseId]);
+    AppDatabase.run('DELETE FROM gps WHERE resposta_id = ?', [responseId]);
+    AppDatabase.run('DELETE FROM assinaturas WHERE resposta_id = ?', [responseId]);
+    AppDatabase.run('DELETE FROM respostas WHERE id = ?', [responseId]);
+  };
+
+  const resetCurrentCollection = () => {
+    const initialValues = initialValuesForFields(campos);
+    clearDraft(currentFormId);
+    setFormValues(initialValues);
+    setFormErrors({});
+    setGpsTrack([]);
+    setDraftSavedAt(null);
+    gpsSessionIdRef.current = createGpsSessionId();
+    lastGpsPointRef.current = null;
+    hasUserEditedRef.current = false;
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
+  const handleDiscardCollection = () => {
+    Alert.alert(
+      'Descartar coleta',
+      'Deseja excluir esta coleta local e comecar uma nova em branco?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Descartar',
+          style: 'destructive',
+          onPress: () => {
+            if (currentRespostaId) {
+              deleteLocalResponse(currentRespostaId);
+              router.back();
+              return;
+            }
+
+            resetCurrentCollection();
+            setSaveFeedback({
+              title: 'Coleta descartada',
+              subtitle: 'Os campos foram limpos para iniciar uma nova avaliacao.',
+            });
+          },
+        },
+      ]
+    );
   };
 
   const handleExport = async (format) => {
@@ -1003,19 +1301,44 @@ export default function FormularioPreencher() {
       >
         {isCqo ? (
           <View style={styles.paperProgressHeader}>
+            {saveFeedback ? (
+              <Animated.View
+                style={[
+                  styles.saveFeedback,
+                  {
+                    opacity: saveFeedbackAnim,
+                    transform: [{
+                      translateY: saveFeedbackAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-10, 0],
+                      }),
+                    }],
+                  },
+                ]}
+              >
+                <Text style={styles.saveFeedbackTitle}>{saveFeedback.title}</Text>
+                <Text style={styles.saveFeedbackSubtitle}>{saveFeedback.subtitle}</Text>
+              </Animated.View>
+            ) : null}
             <View style={styles.paperTitleRow}>
               <View style={styles.paperTitleBlock}>
                 <Text style={styles.paperEyebrow}>{isCarreamento ? 'Qualidade Agrícola' : 'Piloto CQO'}</Text>
                 <Text style={styles.paperTitle}>{heroTitle}</Text>
               </View>
-              <Chip
-                compact
-                icon={isOnline ? 'wifi' : 'cloud-off-outline'}
-                style={isOnline ? styles.onlineChip : styles.offlineChip}
-                textStyle={isOnline ? styles.onlineChipText : styles.offlineChipText}
-              >
-                {isOnline ? 'Online' : 'Offline'}
-              </Chip>
+              <View style={styles.paperHeaderActions}>
+                <TouchableOpacity style={styles.discardButton} onPress={handleDiscardCollection}>
+                  <MaterialCommunityIcons name="trash-can-outline" size={16} color="#9F1239" />
+                  <Text style={styles.discardButtonText}>Descartar</Text>
+                </TouchableOpacity>
+                <Chip
+                  compact
+                  icon={isOnline ? 'wifi' : 'cloud-off-outline'}
+                  style={isOnline ? styles.onlineChip : styles.offlineChip}
+                  textStyle={isOnline ? styles.onlineChipText : styles.offlineChipText}
+                >
+                  {isOnline ? 'Online' : 'Offline'}
+                </Chip>
+              </View>
             </View>
             <View style={styles.progressTextRow}>
               <Text style={[styles.progressLabel, styles.cqoProgressLabel]}>
@@ -1027,6 +1350,11 @@ export default function FormularioPreencher() {
             <Text style={styles.gpsTrackText}>
               GPS trilha: {isTrackingGps ? `${gpsTrack.length} pontos coletados` : 'aguardando permissão ou sinal'}
             </Text>
+            {draftSavedAt ? (
+              <Text style={styles.draftStatusText}>
+                Rascunho salvo automaticamente
+              </Text>
+            ) : null}
           </View>
         ) : (
           <View style={styles.progressHeader}>
@@ -1056,7 +1384,7 @@ export default function FormularioPreencher() {
             {renderCqoCorteSection(
               'Responsáveis',
               'Informe quem avaliou e quem acompanhou a coleta.',
-              ['matricula_avaliador', 'fiscal_resp']
+              ['matricula_avaliador', 'matricula_avaliador_2', 'fiscal_resp', 'fiscal_resp_equipe']
             )}
             {campos.find((field) => field.id === 'linhas_corte') ? renderField(campos.find((field) => field.id === 'linhas_corte')) : null}
             {renderCqoCorteSection(
@@ -1086,7 +1414,7 @@ export default function FormularioPreencher() {
             {renderCqoCorteSection(
               'Responsáveis',
               'Informe quem avaliou e quem fiscalizou a coleta.',
-              ['matricula_avaliador', 'fiscal_resp']
+              ['matricula_avaliador', 'matricula_avaliador_2', 'fiscal_resp', 'fiscal_resp_equipe']
             )}
             {campos.find((field) => field.id === 'linhas_carreamento') ? renderField(campos.find((field) => field.id === 'linhas_carreamento')) : null}
             {renderCqoCorteSection(
@@ -1121,15 +1449,6 @@ export default function FormularioPreencher() {
                 contentStyle={styles.paperExportButtonContent}
               >
                 PDF
-              </PaperButton>
-              <PaperButton
-                mode="outlined"
-                icon="microsoft-excel"
-                onPress={() => handleExport('excel')}
-                style={styles.paperExportButton}
-                contentStyle={styles.paperExportButtonContent}
-              >
-                Excel
               </PaperButton>
             </View>
             <PaperButton
@@ -1196,10 +1515,31 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderBottomWidth: 0,
   },
+  saveFeedback: {
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  saveFeedbackTitle: {
+    color: Colors.white,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  saveFeedbackSubtitle: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
   paperTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
     marginBottom: 8,
   },
   paperTitleBlock: {
@@ -1216,6 +1556,27 @@ const styles = StyleSheet.create({
   paperTitle: {
     color: Colors.white,
     fontSize: 27,
+    fontWeight: '900',
+  },
+  paperHeaderActions: {
+    alignItems: 'flex-end',
+    gap: 7,
+  },
+  discardButton: {
+    minHeight: 31,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: 'rgba(159,18,57,0.24)',
+    borderRadius: 8,
+    backgroundColor: '#FFE4E6',
+  },
+  discardButtonText: {
+    color: '#9F1239',
+    fontSize: 11,
     fontWeight: '900',
   },
   paperSubtitle: {
@@ -1282,6 +1643,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     marginTop: 8,
+  },
+  draftStatusText: {
+    color: Colors.orangeLight,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 4,
   },
   scrollContainer: {
     padding: 20,

@@ -3,21 +3,26 @@ import {
   View,
   Text,
   Image,
-  TextInput,
   StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
+import {
+  Button,
+  Card,
+  Divider,
+  HelperText,
+  IconButton,
+  TextInput as PaperTextInput,
+} from 'react-native-paper';
 import { Colors } from '../core/colors';
 import { normalizeIntegerInput, readIntegerInput } from '../core/numberInput';
 
 const FIELD_DEFINITIONS = [
   { id: 'linha', titulo: 'Linha', keyboardType: 'default' },
-  { id: 'numero_plantas_linha', titulo: 'Nº de plantas/linha' },
+  { id: 'numero_plantas_linha', titulo: 'Nº de plantas por linha' },
   { id: 'cacho_mal_posicionado', titulo: 'Cacho mal posicionado', legado: 'cachoMalPosicionado' },
   { id: 'cacho_nao_carreado', titulo: 'Cacho não carreado', legado: 'Cachonaocarreado' },
-  { id: 'numero_plantas_observadas', titulo: 'Nº de plantas observadas - fruto solto', legado: 'NumeroPlantasObservadas' },
-  { id: 'peso_medio', titulo: 'Peso médio - fruto solto' },
 ];
 
 const OCCURRENCE_FIELD_IDS = new Set([
@@ -25,12 +30,49 @@ const OCCURRENCE_FIELD_IDS = new Set([
   'cacho_nao_carreado',
 ]);
 
-const createEmptyLine = () => (
+const PHOTO_FIELD_IDS = new Set([
+  'cacho_mal_posicionado',
+  'cacho_nao_carreado',
+]);
+
+const createEmptyLine = (ruaIndex = 1, lado = 1) => (
   FIELD_DEFINITIONS.reduce((acc, field) => {
     acc[field.id] = field.keyboardType === 'default' ? '' : '';
     return acc;
-  }, {})
+  }, {
+    rua_index: ruaIndex,
+    lado_linha: lado,
+  })
 );
+
+const normalizeLineRow = (row, index) => ({
+  rua_index: row?.rua_index || Math.floor(index / 2) + 1,
+  lado_linha: row?.lado_linha || ((index % 2) + 1),
+  ...row,
+});
+
+const rowsToRuaGroups = (rows) => {
+  const normalizedRows = rows.map((row, index) => normalizeLineRow(row, index));
+  const groups = [];
+
+  normalizedRows.forEach((row, index) => {
+    const groupIndex = Math.floor(index / 2);
+    if (!groups[groupIndex]) {
+      groups[groupIndex] = {
+        ruaIndex: row.rua_index || groupIndex + 1,
+        rows: [],
+      };
+    }
+    groups[groupIndex].rows[index % 2] = row;
+  });
+
+  return groups.map((group, groupIndex) => ({
+    ruaIndex: group.ruaIndex || groupIndex + 1,
+    rows: [0, 1].map((lineIndex) => (
+      group.rows[lineIndex] || createEmptyLine(group.ruaIndex || groupIndex + 1, lineIndex + 1)
+    )),
+  }));
+};
 
 const getOccurrenceCount = (row, fieldId) => {
   const occurrences = Array.isArray(row?._gps_ocorrencias) ? row._gps_ocorrencias : [];
@@ -39,8 +81,64 @@ const getOccurrenceCount = (row, fieldId) => {
     .reduce((total, occurrence) => total + (Number(occurrence.quantidade) || 1), 0);
 };
 
-function LineField({ definition, value, occurrenceCount, onChange, onNumericChange, isCapturing }) {
+const getPhotosForField = (row, fieldId) => {
+  const grouped = row?._evidencias_fotos;
+  if (!grouped || !Array.isArray(grouped[fieldId])) return [];
+  return grouped[fieldId];
+};
+
+function FieldPhotos({ photos, onCapture, onRemove, isCapturing }) {
+  return (
+    <View style={styles.itemPhotoBlock}>
+      <View style={styles.itemPhotoHeader}>
+        <Text style={styles.itemPhotoLabel}>{photos.length} foto(s)</Text>
+        <IconButton
+          icon="camera-plus-outline"
+          mode="contained-tonal"
+          size={17}
+          onPress={onCapture}
+          disabled={isCapturing}
+          style={styles.itemPhotoButton}
+          iconColor={Colors.greenInstitutional}
+        />
+      </View>
+      {isCapturing ? <ActivityIndicator color={Colors.greenInstitutional} size="small" /> : null}
+      {photos.length > 0 ? (
+        <View style={styles.itemPhotoGrid}>
+          {photos.map((photo, index) => (
+            <View style={styles.itemPhotoPreview} key={`${photo.uri || 'photo'}_${index}`}>
+              <Image source={{ uri: photo.uri }} style={styles.itemPhotoImage} resizeMode="cover" />
+              {photo.gps ? (
+                <View style={styles.photoGpsBadge}>
+                  <Text style={styles.photoGpsBadgeText}>GPS</Text>
+                </View>
+              ) : null}
+              <TouchableOpacity style={styles.photoRemoveBadge} onPress={() => onRemove(index)}>
+                <Text style={styles.photoRemoveText}>x</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function LineField({
+  definition,
+  value,
+  row,
+  occurrenceCount,
+  onChange,
+  onNumericChange,
+  onPhotoCapture,
+  onPhotoRemove,
+  isCapturing,
+  isCapturingPhoto,
+}) {
   const isNumeric = definition.keyboardType !== 'default';
+  const photos = getPhotosForField(row, definition.id);
+  const showPhotos = PHOTO_FIELD_IDS.has(definition.id);
 
   const updateByStep = (step) => {
     const current = readIntegerInput(value);
@@ -53,10 +151,16 @@ function LineField({ definition, value, occurrenceCount, onChange, onNumericChan
       <Text style={styles.fieldLabel}>{definition.titulo}</Text>
       {isNumeric ? (
         <View style={styles.stepper}>
-          <TouchableOpacity style={styles.stepButton} onPress={() => updateByStep(-1)}>
-            <Text style={styles.stepButtonText}>-</Text>
-          </TouchableOpacity>
-          <TextInput
+          <IconButton
+            icon="minus"
+            mode="contained-tonal"
+            size={18}
+            style={styles.stepIconButton}
+            iconColor={Colors.greenInstitutional}
+            onPress={() => updateByStep(-1)}
+          />
+          <PaperTextInput
+            mode="outlined"
             style={styles.stepInput}
             value={value === null || value === undefined ? '' : String(value)}
             onChangeText={(textValue) => {
@@ -67,87 +171,78 @@ function LineField({ definition, value, occurrenceCount, onChange, onNumericChan
             }}
             keyboardType="numeric"
             placeholder="0"
-            placeholderTextColor={Colors.grayText}
+            dense
+            outlineColor={Colors.cardBorder}
+            activeOutlineColor={Colors.greenInstitutional}
           />
-          <TouchableOpacity
-            style={[styles.stepButton, isCapturing ? styles.stepButtonLoading : null]}
-            onPress={() => updateByStep(1)}
-            disabled={isCapturing}
-          >
-            {isCapturing ? (
+          {isCapturing ? (
+            <View style={[styles.stepIconButton, styles.captureLoadingButton]}>
               <ActivityIndicator color={Colors.white} size="small" />
-            ) : (
-              <Text style={styles.stepButtonText}>+</Text>
-            )}
-          </TouchableOpacity>
+            </View>
+          ) : (
+            <IconButton
+              icon="plus"
+              mode="contained"
+              size={18}
+              style={styles.stepIconButton}
+              iconColor={Colors.white}
+              containerColor={Colors.greenInstitutional}
+              onPress={() => updateByStep(1)}
+            />
+          )}
         </View>
       ) : (
-        <TextInput
+        <PaperTextInput
+          mode="outlined"
           style={styles.input}
           value={value === null || value === undefined ? '' : String(value)}
           onChangeText={onChange}
           keyboardType="default"
-          placeholder=""
-          placeholderTextColor={Colors.grayText}
+          dense
+          outlineColor={Colors.cardBorder}
+          activeOutlineColor={Colors.greenInstitutional}
         />
       )}
       {occurrenceCount > 0 && (
         <Text style={styles.gpsOccurrenceText}>
-          GPS: {occurrenceCount} ocorrencia(s) georreferenciada(s)
+          GPS: {occurrenceCount} ocorrência(s) georreferenciada(s)
         </Text>
       )}
       {isCapturing && (
         <Text style={styles.gpsCaptureText}>Capturando GPS...</Text>
       )}
-    </View>
-  );
-}
-
-function LinePhoto({ photo, onCapture, onRemove, isCapturing }) {
-  return (
-    <View style={styles.photoBlock}>
-      <Text style={styles.photoLabel}>Foto da linha</Text>
-      {photo ? (
-        <View style={styles.photoPreview}>
-          <Image source={{ uri: photo.uri }} style={styles.photoImage} resizeMode="cover" />
-          {photo.gps ? (
-            <View style={styles.photoGpsBadge}>
-              <Text style={styles.photoGpsBadgeText}>GPS</Text>
-            </View>
-          ) : null}
-          <TouchableOpacity style={styles.photoRemoveBadge} onPress={onRemove}>
-            <Text style={styles.photoRemoveText}>x</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <TouchableOpacity style={styles.photoButton} onPress={onCapture} disabled={isCapturing}>
-          {isCapturing ? (
-            <ActivityIndicator color={Colors.greenInstitutional} size="small" />
-          ) : (
-            <>
-              <Text style={styles.photoButtonIcon}>CAM</Text>
-              <Text style={styles.photoButtonText}>Adicionar foto</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      )}
+      {showPhotos ? (
+        <FieldPhotos
+          photos={photos}
+          onCapture={onPhotoCapture}
+          onRemove={onPhotoRemove}
+          isCapturing={isCapturingPhoto}
+        />
+      ) : null}
     </View>
   );
 }
 
 export default function CampoLinhasCqoCarreamento({ field, value, onChange, error, captureOccurrenceGps, captureLinePhoto }) {
-  const rows = Array.isArray(value) ? value : [];
+  const rawRows = Array.isArray(value) ? value.map((row, index) => normalizeLineRow(row, index)) : [];
+  const ruaGroups = rowsToRuaGroups(rawRows);
+  const rows = ruaGroups.flatMap((group) => group.rows);
   const obrigatorio = field.obrigatorio === 1 || field.obrigatorio === true;
   const [capturingKey, setCapturingKey] = useState(null);
   const [capturingPhotoKey, setCapturingPhotoKey] = useState(null);
 
-  const handleAddLine = () => {
-    onChange([...rows, createEmptyLine()]);
+  const handleAddRua = () => {
+    const nextRuaIndex = ruaGroups.length + 1;
+    onChange([
+      ...rows,
+      createEmptyLine(nextRuaIndex, 1),
+      createEmptyLine(nextRuaIndex, 2),
+    ]);
   };
 
-  const handleRemoveLine = (index) => {
-    if (rows.length <= 1) return;
-    onChange(rows.filter((_, rowIndex) => rowIndex !== index));
+  const handleRemoveRua = (groupIndex) => {
+    if (ruaGroups.length <= 1) return;
+    onChange(rows.filter((_, rowIndex) => Math.floor(rowIndex / 2) !== groupIndex));
   };
 
   const handleFieldChange = (rowIndex, fieldId, fieldValue) => {
@@ -156,28 +251,53 @@ export default function CampoLinhasCqoCarreamento({ field, value, onChange, erro
     )));
   };
 
-  const handlePhotoCapture = async (rowIndex) => {
+  const handlePhotoCapture = async (rowIndex, definition) => {
     if (typeof captureLinePhoto !== 'function') return;
-    const captureKey = `photo_${rowIndex}`;
+    const captureKey = `photo_${rowIndex}_${definition.id}`;
     setCapturingPhotoKey(captureKey);
     try {
       const photo = await captureLinePhoto({
-        campo_id: 'foto_linha',
-        linha: rows[rowIndex]?.linha || String(rowIndex + 1),
+        campo_id: definition.id,
+        titulo: definition.titulo,
+        rua_index: rows[rowIndex]?.rua_index || Math.floor(rowIndex / 2) + 1,
+        lado_linha: rows[rowIndex]?.lado_linha || (rowIndex % 2) + 1,
+        linha: rows[rowIndex]?.linha || '',
         row_index: rowIndex + 1,
       });
       if (!photo) return;
       onChange(rows.map((row, index) => (
-        index === rowIndex ? { ...row, evidencia_foto: photo } : row
+        index === rowIndex ? {
+          ...row,
+          _evidencias_fotos: {
+            ...(row._evidencias_fotos || {}),
+            [definition.id]: [
+              ...getPhotosForField(row, definition.id),
+              {
+                ...photo,
+                campo_id: definition.id,
+                titulo: definition.titulo,
+                rua_index: row.rua_index || Math.floor(rowIndex / 2) + 1,
+                lado_linha: row.lado_linha || (rowIndex % 2) + 1,
+                linha: row.linha || '',
+              },
+            ],
+          },
+        } : row
       )));
     } finally {
       setCapturingPhotoKey(null);
     }
   };
 
-  const handlePhotoRemove = (rowIndex) => {
+  const handlePhotoRemove = (rowIndex, fieldId, photoIndex) => {
     onChange(rows.map((row, index) => (
-      index === rowIndex ? { ...row, evidencia_foto: null } : row
+      index === rowIndex ? {
+        ...row,
+        _evidencias_fotos: {
+          ...(row._evidencias_fotos || {}),
+          [fieldId]: getPhotosForField(row, fieldId).filter((_, indexPhoto) => indexPhoto !== photoIndex),
+        },
+      } : row
     )));
   };
 
@@ -216,7 +336,9 @@ export default function CampoLinhasCqoCarreamento({ field, value, onChange, erro
         const gps = await captureOccurrenceGps({
           campo_id: definition.id,
           titulo: definition.titulo,
-          linha: row.linha || String(rowIndex + 1),
+          rua_index: row.rua_index || Math.floor(rowIndex / 2) + 1,
+          lado_linha: row.lado_linha || (rowIndex % 2) + 1,
+          linha: row.linha || '',
           quantidade: delta,
         });
         if (gps) {
@@ -224,7 +346,9 @@ export default function CampoLinhasCqoCarreamento({ field, value, onChange, erro
             id: `occ_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
             campo_id: definition.id,
             titulo: definition.titulo,
-            linha: row.linha || String(rowIndex + 1),
+            rua_index: row.rua_index || Math.floor(rowIndex / 2) + 1,
+            lado_linha: row.lado_linha || (rowIndex % 2) + 1,
+            linha: row.linha || '',
             quantidade: delta,
             ...gps,
           };
@@ -257,97 +381,133 @@ export default function CampoLinhasCqoCarreamento({ field, value, onChange, erro
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.labelRow}>
-        <Text style={styles.label}>{field.titulo}</Text>
-        {obrigatorio && <Text style={styles.required}> *</Text>}
-      </View>
-
-      {rows.length === 0 ? (
-        <View style={[styles.emptyState, error ? styles.inputError : null]}>
-          <Text style={styles.emptyText}>Nenhuma linha adicionada.</Text>
+    <Card style={styles.container} mode="elevated">
+      <Card.Content>
+        <View style={styles.labelRow}>
+          <Text style={styles.label}>{field.titulo}</Text>
+          {obrigatorio && <Text style={styles.required}> *</Text>}
         </View>
-      ) : (
-        rows.map((row, rowIndex) => (
-          <View style={[styles.lineCard, error ? styles.inputError : null]} key={`linha_carreamento_${rowIndex}`}>
-            <View style={styles.lineHeader}>
-              <Text style={styles.lineTitle}>Linha</Text>
-              <TouchableOpacity
-                style={styles.removeButton}
-                onPress={() => handleRemoveLine(rowIndex)}
-                disabled={rows.length <= 1}
-              >
-                <Text style={styles.removeButtonText}>Remover</Text>
-              </TouchableOpacity>
-            </View>
+        <Text style={styles.sectionHint}>
+          Registre cada rua avaliada como um par de duas linhas lado a lado.
+        </Text>
 
-            <View style={styles.fieldsGrid}>
-              {FIELD_DEFINITIONS.map((definition) => (
-                <LineField
-                  key={definition.id}
-                  definition={definition}
-                  value={row?.[definition.id]}
-                  onChange={(fieldValue) => handleFieldChange(rowIndex, definition.id, fieldValue)}
-                  onNumericChange={(fieldValue, delta) => handleNumericChange(rowIndex, definition, fieldValue, delta)}
-                  occurrenceCount={getOccurrenceCount(row, definition.id)}
-                  isCapturing={capturingKey === `${rowIndex}_${definition.id}`}
-                />
-              ))}
-            </View>
-            <LinePhoto
-              photo={row?.evidencia_foto}
-              onCapture={() => handlePhotoCapture(rowIndex)}
-              onRemove={() => handlePhotoRemove(rowIndex)}
-              isCapturing={capturingPhotoKey === `photo_${rowIndex}`}
-            />
+        {rows.length === 0 ? (
+          <View style={[styles.emptyState, error ? styles.inputError : null]}>
+            <Text style={styles.emptyText}>Nenhuma rua avaliada adicionada.</Text>
           </View>
-        ))
-      )}
+        ) : (
+          ruaGroups.map((group, groupIndex) => (
+            <Card style={[styles.lineCard, error ? styles.inputError : null]} key={`rua_carreamento_${groupIndex}`} mode="outlined">
+              <Card.Content>
+                <View style={styles.lineHeader}>
+                  <Text style={styles.lineTitle}>Rua avaliada {groupIndex + 1}</Text>
+                  <Button
+                    mode="text"
+                    icon="trash-can-outline"
+                    textColor={Colors.danger}
+                    compact
+                    disabled={ruaGroups.length <= 1}
+                    onPress={() => handleRemoveRua(groupIndex)}
+                  >
+                    Remover rua
+                  </Button>
+                </View>
+                <Divider style={styles.lineDivider} />
 
-      <TouchableOpacity style={styles.addButton} onPress={handleAddLine}>
-        <Text style={styles.addButtonText}>Adicionar linha</Text>
-      </TouchableOpacity>
+                <View style={styles.streetLinesRow}>
+                  {group.rows.map((row, lineIndex) => {
+                    const rowIndex = groupIndex * 2 + lineIndex;
+                    return (
+                      <View style={styles.lineSideBlock} key={`rua_${groupIndex}_linha_${lineIndex}`}>
+                        <Text style={styles.lineSideTitle}>Linha {lineIndex + 1} da rua</Text>
+                        <View style={styles.fieldsGrid}>
+                          {FIELD_DEFINITIONS.map((definition) => (
+                            <LineField
+                              key={definition.id}
+                              definition={definition}
+                              value={row?.[definition.id]}
+                              row={row}
+                              onChange={(fieldValue) => handleFieldChange(rowIndex, definition.id, fieldValue)}
+                              onNumericChange={(fieldValue, delta) => handleNumericChange(rowIndex, definition, fieldValue, delta)}
+                              onPhotoCapture={() => handlePhotoCapture(rowIndex, definition)}
+                              onPhotoRemove={(photoIndex) => handlePhotoRemove(rowIndex, definition.id, photoIndex)}
+                              occurrenceCount={getOccurrenceCount(row, definition.id)}
+                              isCapturing={capturingKey === `${rowIndex}_${definition.id}`}
+                              isCapturingPhoto={capturingPhotoKey === `photo_${rowIndex}_${definition.id}`}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </Card.Content>
+            </Card>
+          ))
+        )}
 
-      {error && <Text style={styles.errorText}>{error}</Text>}
-    </View>
+        <Button
+          mode="contained"
+          icon="plus"
+          onPress={handleAddRua}
+          style={styles.addButton}
+          contentStyle={styles.addButtonContent}
+        >
+          Adicionar rua avaliada
+        </Button>
+
+        <HelperText type="error" visible={!!error}>
+          {error}
+        </HelperText>
+      </Card.Content>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 14,
+    marginBottom: 18,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    borderLeftWidth: 6,
+    borderLeftColor: Colors.greenInstitutional,
+    borderWidth: 1,
+    borderColor: '#D5E5DB',
   },
   labelRow: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: 2,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '900',
+    fontSize: 18,
+    fontWeight: '700',
     color: Colors.greenDark,
+  },
+  sectionHint: {
+    color: Colors.grayText,
+    fontSize: 12,
+    marginBottom: 12,
   },
   required: {
     color: Colors.danger,
     fontWeight: 'bold',
   },
   emptyState: {
-    backgroundColor: Colors.white,
+    backgroundColor: '#F8FCFA',
     borderWidth: 1,
-    borderColor: 'rgba(32,49,37,0.09)',
-    borderRadius: 8,
-    padding: 14,
+    borderColor: Colors.cardBorder,
+    borderRadius: 12,
+    padding: 16,
   },
   emptyText: {
     color: Colors.grayText,
     fontSize: 13,
   },
   lineCard: {
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: 'rgba(31,122,77,0.18)',
-    borderRadius: 8,
-    padding: 13,
+    backgroundColor: '#F8FCFA',
+    borderRadius: 12,
     marginBottom: 12,
+    borderColor: '#D5E5DB',
   },
   lineHeader: {
     flexDirection: 'row',
@@ -356,9 +516,38 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   lineTitle: {
+    color: Colors.white,
+    fontSize: 15,
+    fontWeight: '800',
+    backgroundColor: Colors.greenInstitutional,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  lineDivider: {
+    marginBottom: 12,
+  },
+  streetLinesRow: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    gap: 8,
+    alignItems: 'flex-start',
+  },
+  lineSideBlock: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: '#D5E5DB',
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 12,
+  },
+  lineSideTitle: {
     color: Colors.greenDark,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '900',
+    marginBottom: 8,
   },
   fieldsGrid: {
     flexDirection: 'row',
@@ -370,55 +559,35 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   fieldLabel: {
-    color: Colors.grayDark,
+    color: Colors.greenDark,
     fontSize: 11,
-    fontWeight: '900',
+    fontWeight: '800',
     marginBottom: 5,
   },
   input: {
-    backgroundColor: Colors.grayLight,
-    borderWidth: 1,
-    borderColor: 'rgba(32,49,37,0.11)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    fontSize: 13,
-    color: Colors.grayDark,
+    backgroundColor: Colors.white,
   },
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.grayLight,
-    borderWidth: 1,
-    borderColor: 'rgba(32,49,37,0.11)',
-    borderRadius: 8,
-    overflow: 'hidden',
+    gap: 4,
   },
-  stepButton: {
-    width: 44,
-    minHeight: 42,
+  stepIconButton: {
+    width: 34,
+    height: 34,
+    margin: 0,
+    flexShrink: 0,
+  },
+  captureLoadingButton: {
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.white,
-  },
-  stepButtonLoading: {
     backgroundColor: Colors.greenInstitutional,
-  },
-  stepButtonText: {
-    color: Colors.greenDark,
-    fontSize: 18,
-    fontWeight: '900',
   },
   stepInput: {
     flex: 1,
-    minHeight: 42,
-    textAlign: 'center',
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: Colors.cardBorder,
-    paddingHorizontal: 6,
-    fontSize: 13,
-    color: Colors.grayDark,
+    minWidth: 42,
+    backgroundColor: Colors.white,
   },
   gpsOccurrenceText: {
     color: Colors.greenInstitutional,
@@ -437,32 +606,27 @@ const styles = StyleSheet.create({
   },
   photoLabel: {
     color: Colors.greenDark,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     marginBottom: 6,
   },
   photoButton: {
-    minHeight: 88,
-    borderRadius: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     borderWidth: 1,
     borderColor: Colors.cardBorder,
     backgroundColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  photoButtonIcon: {
-    color: Colors.grayText,
-    fontSize: 16,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  photoButtonText: {
-    color: Colors.grayDark,
-    fontSize: 13,
-    fontWeight: '700',
+  photoIconButton: {
+    width: 34,
+    height: 34,
+    margin: 0,
   },
   photoPreview: {
-    height: 120,
+    height: 86,
     borderRadius: 10,
     overflow: 'hidden',
     position: 'relative',
@@ -504,26 +668,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.danger,
   },
   addButton: {
-    backgroundColor: Colors.orangeInstitutional,
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
+    borderRadius: 10,
+    backgroundColor: Colors.greenInstitutional,
   },
-  addButtonText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  removeButton: {
-    backgroundColor: Colors.dangerLight,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  removeButtonText: {
-    color: Colors.danger,
-    fontSize: 11,
-    fontWeight: '800',
+  addButtonContent: {
+    minHeight: 46,
   },
   errorText: {
     color: Colors.danger,

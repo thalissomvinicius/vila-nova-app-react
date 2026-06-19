@@ -1,23 +1,94 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  ScrollView,
-  StatusBar,
-} from 'react-native';
-import { Stack } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Modal, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { AppDatabase } from '../core/database';
 import { Colors } from '../core/colors';
+import { exportRecord } from '../core/reportExporter';
+import { ScreenShell, chromeStyles } from '../components/PrototypeChrome';
+
+function parseDados(item) {
+  try {
+    return JSON.parse(item.dados_json || '{}');
+  } catch (_) {
+    return {};
+  }
+}
+
+function formType(item) {
+  const title = String(item.form_titulo || item.formulario_id || '').toLowerCase();
+  if (title.includes('carreamento')) return 'Carreamento';
+  if (title.includes('corte')) return 'CQO Corte';
+  return item.form_titulo || 'Formulário';
+}
+
+function statusLabel(status) {
+  if (status === 'sincronizado') return 'Sincronizado';
+  if (status === 'erro') return 'Revisar';
+  return 'Pendente';
+}
+
+function statusStyle(status) {
+  if (status === 'sincronizado') return 'synced';
+  if (status === 'erro') return 'failed';
+  return 'pending';
+}
+
+const MONTHS = [
+  { value: 'todos', label: 'Todos' },
+  { value: '01', label: 'Jan' },
+  { value: '02', label: 'Fev' },
+  { value: '03', label: 'Mar' },
+  { value: '04', label: 'Abr' },
+  { value: '05', label: 'Mai' },
+  { value: '06', label: 'Jun' },
+  { value: '07', label: 'Jul' },
+  { value: '08', label: 'Ago' },
+  { value: '09', label: 'Set' },
+  { value: '10', label: 'Out' },
+  { value: '11', label: 'Nov' },
+  { value: '12', label: 'Dez' },
+];
+
+const YEAR_LOOKBACK = 6;
+
+function parseRecordDate(item) {
+  const dados = parseDados(item);
+  const rawDate = dados.data_avaliacao || item.criado_em;
+
+  if (typeof rawDate === 'string') {
+    const brMatch = rawDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (brMatch) {
+      return { month: brMatch[2], year: brMatch[3], label: rawDate };
+    }
+  }
+
+  const date = new Date(rawDate);
+  if (!Number.isNaN(date.getTime())) {
+    return {
+      month: String(date.getMonth() + 1).padStart(2, '0'),
+      year: String(date.getFullYear()),
+      label: date.toLocaleDateString('pt-BR'),
+    };
+  }
+
+  return { month: 'sem_mes', year: 'sem_ano', label: 'Data nao informada' };
+}
+
+function canModifyRecord(item) {
+  return item.status === 'pendente' || item.status === 'erro';
+}
 
 export default function Historico() {
-  const [activeTab, setActiveTab] = useState('pendente'); // 'pendente' or 'sincronizado'
-  const [submissions, setSubmissions] = useState([]);
-  const [expandedId, setExpandedId] = useState(null);
+  const router = useRouter();
+  const [records, setRecords] = useState([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'));
+  const [selectedYear, setSelectedYear] = useState(String(currentDate.getFullYear()));
 
   const fetchHistory = useCallback(() => {
+    setIsHistoryLoading(true);
     try {
       const results = AppDatabase.getAll(`
         SELECT r.*, f.titulo as form_titulo, f.area_id
@@ -25,9 +96,11 @@ export default function Historico() {
         LEFT JOIN formularios f ON r.formulario_id = f.id
         ORDER BY r.criado_em DESC
       `);
-      setSubmissions(results);
+      setRecords(results);
     } catch (e) {
       console.error('Error fetching history:', e);
+    } finally {
+      setIsHistoryLoading(false);
     }
   }, []);
 
@@ -35,332 +108,542 @@ export default function Historico() {
     fetchHistory();
   }, [fetchHistory]);
 
-  const toggleExpand = (id) => {
-    setExpandedId(prev => prev === id ? null : id);
+  useFocusEffect(fetchHistory);
+
+  const yearOptions = useMemo(() => {
+    const years = records
+      .map((item) => parseRecordDate(item).year)
+      .filter((year) => year && year !== 'sem_ano');
+    const defaultYears = Array.from({ length: YEAR_LOOKBACK }, (_, index) => (
+      String(currentDate.getFullYear() - index)
+    ));
+    const uniqueYears = Array.from(new Set([...defaultYears, ...years]));
+    return ['todos', ...uniqueYears.sort((a, b) => Number(b) - Number(a))];
+  }, [records]);
+
+  const filteredRecords = useMemo(() => records.filter((item) => {
+    const dateInfo = parseRecordDate(item);
+    const matchMonth = selectedMonth === 'todos' || dateInfo.month === selectedMonth;
+    const matchYear = selectedYear === 'todos' || dateInfo.year === selectedYear;
+    return matchMonth && matchYear;
+  }), [records, selectedMonth, selectedYear]);
+
+  const emitRecord = async (item, format) => {
+    const type = formType(item);
+    const dados = parseDados(item);
+
+    try {
+      await exportRecord({
+        type: type === 'Carreamento' ? 'carreamento' : 'corte',
+        values: dados,
+        format,
+      });
+    } catch (e) {
+      Alert.alert('Erro ao emitir', e.message);
+    }
   };
 
-  const getStatusBadge = (status) => {
-    let color = Colors.warning;
-    let label = 'Pendente';
-    if (status === 'sincronizado') {
-      color = Colors.greenInstitutional;
-      label = 'Sincronizado';
-    } else if (status === 'erro') {
-      color = Colors.danger;
-      label = 'Erro';
+  const editRecord = (item) => {
+    if (!canModifyRecord(item)) {
+      Alert.alert('Coleta enviada', 'Esta coleta ja foi sincronizada e nao pode ser editada no app.');
+      return;
     }
 
-    return (
-      <View style={[styles.badge, { backgroundColor: `${color}15` }]}>
-        <Text style={[styles.badgeText, { color }]}>{label.toUpperCase()}</Text>
-      </View>
+    router.push({
+      pathname: `/preencher/${item.formulario_id}`,
+      params: {
+        titulo: item.form_titulo || 'Coleta',
+        respostaId: item.id,
+      },
+    });
+  };
+
+  const deleteRecord = (item) => {
+    if (!canModifyRecord(item)) {
+      Alert.alert('Coleta enviada', 'Esta coleta ja foi sincronizada e nao pode ser excluida no app.');
+      return;
+    }
+
+    Alert.alert(
+      'Excluir coleta',
+      'Deseja excluir esta coleta local e remover ela da fila de sincronizacao?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: () => {
+            AppDatabase.run('DELETE FROM sync_queue WHERE referencia_id = ?', [item.id]);
+            AppDatabase.run('DELETE FROM anexos WHERE resposta_id = ?', [item.id]);
+            AppDatabase.run('DELETE FROM gps WHERE resposta_id = ?', [item.id]);
+            AppDatabase.run('DELETE FROM assinaturas WHERE resposta_id = ?', [item.id]);
+            AppDatabase.run('DELETE FROM respostas WHERE id = ?', [item.id]);
+            fetchHistory();
+          },
+        },
+      ]
     );
   };
 
-  const formatDate = (isoString) => {
-    try {
-      const date = new Date(isoString);
-      return date.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch (_) {
-      return isoString;
-    }
-  };
-
-  // Filter list by active tab
-  const filteredData = submissions.filter((item) => {
-    if (activeTab === 'pendente') {
-      return item.status === 'pendente' || item.status === 'erro';
-    }
-    return item.status === 'sincronizado';
-  });
-
   return (
-    <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: 'Histórico de Coletas',
-          headerRight: () => (
-            <TouchableOpacity onPress={fetchHistory} style={styles.headerRightBtn}>
-              <Text style={styles.headerRightText}>🔄 Atualizar</Text>
-            </TouchableOpacity>
-          ),
-        }}
-      />
-      <StatusBar barStyle="light-content" backgroundColor={Colors.greenDark} />
-
-      {/* Tabs Controller */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'pendente' ? styles.activeTab : null]}
-          onPress={() => {
-            setActiveTab('pendente');
-            setExpandedId(null);
-          }}
-        >
-          <Text style={[styles.tabText, activeTab === 'pendente' ? styles.activeTabText : null]}>
-            Pendentes / Erros
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'sincronizado' ? styles.activeTab : null]}
-          onPress={() => {
-            setActiveTab('sincronizado');
-            setExpandedId(null);
-          }}
-        >
-          <Text style={[styles.tabText, activeTab === 'sincronizado' ? styles.activeTabText : null]}>
-            Sincronizados
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* History List */}
-      {filteredData.length === 0 ? (
+    <ScreenShell title="Histórico" activeNav="history" showBack>
+      <StatusBar barStyle="dark-content" backgroundColor="#F7FAF6" />
+      {isHistoryLoading ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>📂</Text>
-          <Text style={styles.emptyTitle}>Nenhuma coleta nesta aba</Text>
-          <Text style={styles.emptyText}>
-            {activeTab === 'pendente'
-              ? 'Não há coletas pendentes de sincronização local.'
-              : 'Nenhuma coleta foi transmitida ao servidor ainda.'}
-          </Text>
+          <ActivityIndicator size="large" color={Colors.greenInstitutional} />
+          <Text style={styles.emptyTitle}>Carregando coletas</Text>
+          <Text style={styles.emptyText}>Buscando o historico local do aparelho.</Text>
+        </View>
+      ) : records.length === 0 ? (
+        <View style={styles.emptyState}>
+          <MaterialCommunityIcons name="history" size={46} color={Colors.greenInstitutional} />
+          <Text style={styles.emptyTitle}>Nenhuma coleta registrada</Text>
+          <Text style={styles.emptyText}>As coletas salvas localmente aparecem aqui com emissão por registro.</Text>
         </View>
       ) : (
         <FlatList
-          data={filteredData}
+          data={filteredRecords}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
+          ListHeaderComponent={(
+            <View style={styles.filtersCard}>
+              <View style={styles.filterHeader}>
+                <Text style={styles.filterTitle}>Filtro</Text>
+                <Text style={styles.filterMeta}>{filteredRecords.length} de {records.length}</Text>
+              </View>
+              <View style={styles.filterSelectRow}>
+                <FilterSelect
+                  label="Mes"
+                  value={selectedMonth}
+                  options={MONTHS}
+                  onChange={setSelectedMonth}
+                />
+                <FilterSelect
+                  label="Ano"
+                  value={selectedYear}
+                  options={yearOptions.map((year) => ({
+                    value: year,
+                    label: year === 'todos' ? 'Todos' : year,
+                  }))}
+                  onChange={setSelectedYear}
+                />
+              </View>
+            </View>
+          )}
+          ListEmptyComponent={(
+            <View style={styles.emptyFiltered}>
+              <MaterialCommunityIcons name="filter-off-outline" size={32} color={Colors.greenInstitutional} />
+              <Text style={styles.emptyTitle}>Nenhuma coleta nesse filtro</Text>
+              <Text style={styles.emptyText}>Troque o mes ou ano para ver outros registros.</Text>
+            </View>
+          )}
           renderItem={({ item }) => {
-            const isExpanded = expandedId === item.id;
-            let dataObject = {};
-            try {
-              dataObject = JSON.parse(item.dados_json);
-            } catch (_) {}
+            const dados = parseDados(item);
+            const type = formType(item);
+            const fazenda = dados.nome_fazenda || dados.fazenda || 'Fazenda não informada';
+            const parcela = dados.parcela || 'Parcela --';
+            const styleKey = statusStyle(item.status);
+            const dateInfo = parseRecordDate(item);
+            const canModify = canModifyRecord(item);
 
             return (
-              <View style={styles.card}>
-                <TouchableOpacity
-                  style={styles.cardHeader}
-                  onPress={() => toggleExpand(item.id)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.cardHeaderLeft}>
-                    <Text style={styles.cardTitle}>
-                      {item.form_titulo || 'Formulário'}
+              <View style={styles.recordCard}>
+                <View style={styles.recordTop}>
+                  <Text style={styles.recordType}>{type}</Text>
+                  <View style={[styles.statusBadge, styles[`status_${styleKey}`]]}>
+                    <Text style={[styles.statusText, styles[`statusText_${styleKey}`]]}>
+                      {statusLabel(item.status)}
                     </Text>
-                    <Text style={styles.cardTime}>{formatDate(item.criado_em)}</Text>
                   </View>
-                  <View style={styles.cardHeaderRight}>
-                    {getStatusBadge(item.status)}
-                    <Text style={styles.expandIcon}>{isExpanded ? '▲' : '▼'}</Text>
-                  </View>
-                </TouchableOpacity>
+                </View>
 
-                {isExpanded && (
-                  <View style={styles.expandPanel}>
-                    <Text style={styles.expandedSecTitle}>Dados Coletados:</Text>
-                    <View style={styles.dataList}>
-                      {Object.entries(dataObject).map(([key, val]) => {
-                        const cleanKey = key.replace('_', ' ').toUpperCase();
-                        let displayValue = val ? val.toString() : '';
+                <View style={styles.recordBody}>
+                  <Text style={styles.recordFarm}>{fazenda}</Text>
+                  <Text style={styles.recordMeta}>
+                    {parcela} - {dateInfo.label} - {canModify ? 'salvo localmente' : 'enviado'}
+                  </Text>
+                </View>
 
-                        if (displayValue.startsWith('file://')) {
-                          displayValue = '📸 [Foto salva no aparelho]';
-                        } else if (displayValue.startsWith('data:image/')) {
-                          displayValue = '✍️ [Assinatura capturada]';
-                        }
-
-                        return (
-                          <View key={key} style={styles.dataRow}>
-                            <Text style={styles.dataKey}>{cleanKey}:</Text>
-                            <Text style={styles.dataVal}>{displayValue}</Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-
-                    {item.status === 'erro' && item.erro_msg && (
-                      <View style={styles.errorContainer}>
-                        <Text style={styles.errorHeading}>⚠️ Erro de Transmissão:</Text>
-                        <Text style={styles.errorBody}>{item.erro_msg}</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
+                <View style={styles.recordActions}>
+                  {canModify ? (
+                    <ActionButton
+                      label="Editar"
+                      icon="pencil-outline"
+                      variant="edit"
+                      onPress={() => editRecord(item)}
+                    />
+                  ) : null}
+                  <ActionButton
+                    label="PDF"
+                    icon="file-pdf-box"
+                    variant="mini"
+                    onPress={() => emitRecord(item, 'pdf')}
+                  />
+                  {canModify ? (
+                    <ActionButton
+                      label="Excluir"
+                      icon="trash-can-outline"
+                      variant="delete"
+                      onPress={() => deleteRecord(item)}
+                    />
+                  ) : null}
+                </View>
               </View>
             );
           }}
         />
       )}
+    </ScreenShell>
+  );
+}
+
+function FilterSelect({ label, value, options, onChange }) {
+  const [visible, setVisible] = useState(false);
+  const selected = options.find((option) => option.value === value);
+
+  return (
+    <View style={styles.filterSelect}>
+      <Text style={styles.filterLabel}>{label}</Text>
+      <TouchableOpacity style={styles.filterSelectButton} onPress={() => setVisible(true)}>
+        <Text style={styles.filterSelectValue}>{selected?.label || 'Todos'}</Text>
+        <MaterialCommunityIcons name="chevron-down" size={18} color={Colors.greenDark} />
+      </TouchableOpacity>
+
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.filterModalOverlay}
+          activeOpacity={1}
+          onPress={() => setVisible(false)}
+        >
+          <View style={styles.filterModal}>
+            <View style={styles.filterModalHeader}>
+              <Text style={styles.filterModalTitle}>{label}</Text>
+              <TouchableOpacity onPress={() => setVisible(false)}>
+                <Text style={styles.filterModalClose}>Fechar</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={options}
+              keyExtractor={(item) => item.value}
+              ItemSeparatorComponent={() => <View style={styles.filterModalSeparator} />}
+              renderItem={({ item }) => {
+                const active = item.value === value;
+                return (
+                  <TouchableOpacity
+                    style={[styles.filterModalOption, active ? styles.filterModalOptionActive : null]}
+                    onPress={() => {
+                      onChange(item.value);
+                      setVisible(false);
+                    }}
+                  >
+                    <Text style={[styles.filterModalOptionText, active ? styles.filterModalOptionTextActive : null]}>
+                      {item.label}
+                    </Text>
+                    {active ? <MaterialCommunityIcons name="check" size={18} color={Colors.greenInstitutional} /> : null}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
 
+function ActionButton({ label, icon, variant, onPress }) {
+  const isMini = variant === 'mini';
+  const isDelete = variant === 'delete';
+  return (
+    <TouchableOpacity style={isDelete ? styles.deleteButton : isMini ? styles.miniButton : styles.editButton} onPress={onPress}>
+      <MaterialCommunityIcons
+        name={icon}
+        size={15}
+        color={isDelete ? '#9F1239' : isMini ? Colors.orangeDark : Colors.greenDark}
+      />
+      <Text style={isDelete ? styles.deleteButtonText : isMini ? styles.miniButtonText : styles.editButtonText}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  list: {
+    padding: chromeStyles.screenPadding,
+    paddingBottom: chromeStyles.bottomPadding,
+    gap: 12,
   },
-  headerRightBtn: {
-    paddingRight: 8,
-  },
-  headerRightText: {
-    color: Colors.white,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  tabContainer: {
-    flexDirection: 'row',
+  filtersCard: {
+    gap: 9,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: 'rgba(32,49,37,0.09)',
+    borderRadius: 8,
     backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.cardBorder,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 16,
+  filterHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    justifyContent: 'space-between',
+    gap: 10,
   },
-  activeTab: {
-    borderBottomColor: Colors.greenInstitutional,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.grayText,
-  },
-  activeTabText: {
+  filterTitle: {
     color: Colors.greenInstitutional,
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  filterMeta: {
+    color: Colors.grayText,
+    fontSize: 11,
     fontWeight: '800',
   },
-  list: {
-    padding: 16,
-  },
-  card: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    marginBottom: 10,
-    overflow: 'hidden',
-  },
-  cardHeader: {
-    padding: 16,
+  filterSelectRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    gap: 10,
   },
-  cardHeaderLeft: {
+  filterSelect: {
     flex: 1,
-    marginRight: 8,
+    minWidth: 0,
+    gap: 6,
   },
-  cardTitle: {
+  filterLabel: {
+    color: Colors.grayText,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  filterSelectButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(31,122,77,0.2)',
+    borderRadius: 8,
+    backgroundColor: '#F2F8F2',
+  },
+  filterSelectValue: {
+    color: Colors.greenDark,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  filterModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15,23,42,0.35)',
+  },
+  filterModal: {
+    maxHeight: '58%',
+    overflow: 'hidden',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    backgroundColor: Colors.white,
+  },
+  filterModalHeader: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF2EE',
+  },
+  filterModalTitle: {
+    color: Colors.greenDark,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  filterModalClose: {
+    color: Colors.orangeDark,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  filterModalOption: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 18,
+    backgroundColor: Colors.white,
+  },
+  filterModalOptionActive: {
+    backgroundColor: Colors.greenLight,
+  },
+  filterModalOptionText: {
+    color: Colors.grayDark,
     fontSize: 15,
     fontWeight: '800',
-    color: Colors.grayDark,
   },
-  cardTime: {
-    fontSize: 11,
-    color: Colors.grayText,
-    marginTop: 4,
+  filterModalOptionTextActive: {
+    color: Colors.greenInstitutional,
+    fontWeight: '900',
   },
-  cardHeaderRight: {
+  filterModalSeparator: {
+    height: 1,
+    backgroundColor: '#EEF2EE',
+  },
+  recordCard: {
+    gap: 13,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(32,49,37,0.09)',
+    borderRadius: 8,
+    backgroundColor: Colors.white,
+    shadowColor: '#203125',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.07,
+    shadowRadius: 26,
+    elevation: 2,
+  },
+  recordTop: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingBottom: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF2EE',
   },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginRight: 10,
-  },
-  badgeText: {
-    fontSize: 9,
-    fontWeight: 'bold',
-  },
-  expandIcon: {
-    fontSize: 10,
-    color: Colors.grayText,
-  },
-  expandPanel: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: Colors.grayLight,
-    backgroundColor: Colors.grayLight,
-  },
-  expandedSecTitle: {
+  recordType: {
+    color: Colors.greenInstitutional,
     fontSize: 12,
-    fontWeight: '800',
-    color: Colors.grayText,
+    fontWeight: '900',
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
-    marginBottom: 8,
   },
-  dataList: {
-    marginBottom: 4,
+  statusBadge: {
+    minHeight: 30,
+    justifyContent: 'center',
+    paddingHorizontal: 9,
+    borderRadius: 999,
   },
-  dataRow: {
-    flexDirection: 'row',
-    marginBottom: 6,
+  statusText: {
+    fontSize: 11,
+    fontWeight: '900',
   },
-  dataKey: {
+  status_pending: {
+    backgroundColor: Colors.orangeLight,
+  },
+  status_synced: {
+    backgroundColor: Colors.greenLight,
+  },
+  status_failed: {
+    backgroundColor: '#FFE4E6',
+  },
+  statusText_pending: {
+    color: '#7B4A08',
+  },
+  statusText_synced: {
+    color: Colors.greenDark,
+  },
+  statusText_failed: {
+    color: '#9F1239',
+  },
+  recordBody: {
+    minWidth: 0,
+  },
+  recordFarm: {
+    color: '#17221B',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  recordMeta: {
+    color: Colors.grayText,
     fontSize: 12,
     fontWeight: '700',
-    color: Colors.grayText,
-    width: 120,
+    lineHeight: 18,
+    marginTop: 4,
   },
-  dataVal: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.grayDark,
-    flex: 1,
+  recordActions: {
+    flexDirection: 'row',
+    gap: 8,
   },
-  errorContainer: {
-    marginTop: 12,
-    backgroundColor: '#EF444410',
+  editButton: {
+    flex: 1.2,
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     borderWidth: 1,
-    borderColor: '#EF444430',
+    borderColor: 'rgba(31,122,77,0.24)',
     borderRadius: 8,
-    padding: 12,
+    backgroundColor: '#F2F8F2',
   },
-  errorHeading: {
+  miniButton: {
+    flex: 0.78,
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(217,140,16,0.28)',
+    borderRadius: 8,
+    backgroundColor: Colors.orangeLight,
+  },
+  deleteButton: {
+    flex: 0.86,
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(159,18,57,0.2)',
+    borderRadius: 8,
+    backgroundColor: '#FFE4E6',
+  },
+  editButtonText: {
+    color: Colors.greenDark,
     fontSize: 12,
-    fontWeight: '800',
-    color: Colors.danger,
-    marginBottom: 2,
+    fontWeight: '900',
   },
-  errorBody: {
-    fontSize: 11,
-    color: Colors.danger,
-    lineHeight: 16,
+  miniButtonText: {
+    color: Colors.orangeDark,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  deleteButtonText: {
+    color: '#9F1239',
+    fontSize: 12,
+    fontWeight: '900',
   },
   emptyState: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     padding: 32,
+    paddingBottom: chromeStyles.bottomPadding,
   },
-  emptyIcon: {
-    fontSize: 64,
-    opacity: 0.3,
-    marginBottom: 16,
+  emptyFiltered: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 190,
+    padding: 24,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '800',
     color: Colors.grayDark,
-    marginBottom: 8,
+    fontSize: 17,
+    fontWeight: '900',
+    marginTop: 12,
+    textAlign: 'center',
   },
   emptyText: {
-    fontSize: 14,
     color: Colors.grayText,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+    marginTop: 6,
     textAlign: 'center',
-    lineHeight: 20,
   },
 });

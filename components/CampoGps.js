@@ -3,8 +3,24 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } fr
 import * as Location from 'expo-location';
 import { Colors } from '../core/colors';
 
+const GPS_TIMEOUT_MS = 6500;
+const ACCEPTABLE_ACCURACY_METERS = 35;
+
+async function withTimeout(promise, timeoutMs) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export default function CampoGps({ field, value, onChange, error }) {
-  const { id, titulo, obrigatorio } = field;
+  const { titulo, obrigatorio } = field;
   const [isLoading, setIsLoading] = useState(false);
   const [accuracy, setAccuracy] = useState(null);
 
@@ -13,37 +29,57 @@ export default function CampoGps({ field, value, onChange, error }) {
     setAccuracy(null);
 
     try {
-      // 1. Request location permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
           'Permissão negada',
           'Precisamos de acesso à localização para preencher as coordenadas do formulário.'
         );
-        setIsLoading(false);
         return;
       }
 
-      // 2. Check if location services are enabled
       const enabled = await Location.hasServicesEnabledAsync();
       if (!enabled) {
         Alert.alert(
           'GPS desativado',
-          'Por favor, ative a localização/GPS nas configurações do seu celular.'
+          'Ative a localização/GPS nas configurações do seu celular.'
         );
-        setIsLoading(false);
         return;
       }
 
-      // 3. Get current position
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-        timeInterval: 10000,
+      let bestPosition = await Location.getLastKnownPositionAsync({
+        maxAge: 120000,
+        requiredAccuracy: 100,
       });
+      let bestAccuracy = bestPosition?.coords?.accuracy ?? Number.POSITIVE_INFINITY;
 
-      const { latitude, longitude, accuracy: prec } = position.coords;
-      setAccuracy(prec);
-      onChange(`${latitude},${longitude}`);
+      if (bestPosition) setAccuracy(bestAccuracy);
+
+      if (!bestPosition || bestAccuracy > ACCEPTABLE_ACCURACY_METERS) {
+        const position = await withTimeout(
+          Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.High,
+            mayShowUserSettingsDialog: true,
+          }),
+          GPS_TIMEOUT_MS
+        );
+
+        const currentAccuracy = position.coords.accuracy ?? Number.POSITIVE_INFINITY;
+        if (!bestPosition || currentAccuracy <= bestAccuracy) {
+          bestAccuracy = currentAccuracy;
+          bestPosition = position;
+          setAccuracy(currentAccuracy);
+        }
+      }
+
+      if (bestPosition) {
+        const { latitude, longitude } = bestPosition.coords;
+        const accuracyValue = Number.isFinite(bestAccuracy) ? bestAccuracy : '';
+        onChange(`${latitude},${longitude},${accuracyValue}`);
+      } else {
+        setAccuracy(null);
+        Alert.alert('GPS não encontrado', 'Não foi possível obter uma leitura de localização.');
+      }
     } catch (e) {
       console.error('Error fetching location:', e);
       Alert.alert('Erro', 'Não foi possível capturar o sinal de GPS.');
@@ -52,14 +88,12 @@ export default function CampoGps({ field, value, onChange, error }) {
     }
   };
 
-  const hasValue = value && value.includes(',');
-  let lat = '';
-  let lng = '';
-  if (hasValue) {
-    const parts = value.split(',');
-    lat = parseFloat(parts[0]).toFixed(6);
-    lng = parseFloat(parts[1]).toFixed(6);
-  }
+  const parts = value ? String(value).split(',') : [];
+  const hasValue = parts.length >= 2;
+  const lat = hasValue ? parseFloat(parts[0]).toFixed(6) : '';
+  const lng = hasValue ? parseFloat(parts[1]).toFixed(6) : '';
+  const savedAccuracy = Number(parts[2]);
+  const displayAccuracy = Number.isFinite(accuracy) ? accuracy : savedAccuracy;
 
   return (
     <View style={styles.container}>
@@ -77,7 +111,7 @@ export default function CampoGps({ field, value, onChange, error }) {
           {isLoading && (
             <View style={styles.loadingRow}>
               <ActivityIndicator color={Colors.greenInstitutional} size="small" />
-              <Text style={styles.loadingText}>Buscando sinal GPS...</Text>
+              <Text style={styles.loadingText}>Capturando GPS...</Text>
             </View>
           )}
 
@@ -85,9 +119,9 @@ export default function CampoGps({ field, value, onChange, error }) {
             <View>
               <Text style={styles.coordText}>Lat: {lat}</Text>
               <Text style={styles.coordText}>Long: {lng}</Text>
-              {accuracy && (
+              {Number.isFinite(displayAccuracy) && (
                 <Text style={styles.accuracyText}>
-                  Precisão: {accuracy.toFixed(1)}m
+                  Precisão: {displayAccuracy.toFixed(1)}m
                 </Text>
               )}
             </View>

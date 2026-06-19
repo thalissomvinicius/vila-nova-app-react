@@ -1,16 +1,13 @@
 import axios from 'axios';
 import { SecureStoreService } from './secureStore';
-
-const BASE_URL = 'https://api.vilanova-agro.com.br/v1';
+import { AppConfig } from './config';
 
 export const ApiClient = axios.create({
-  baseURL: BASE_URL,
+  baseURL: AppConfig.apiBaseUrl,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'X-App-Version': '1.0.0',
-    'X-Platform': 'android',
   },
 });
 
@@ -18,7 +15,10 @@ export const ApiClient = axios.create({
 ApiClient.interceptors.request.use(
   async (config) => {
     const token = await SecureStoreService.getToken();
-    if (token) {
+    if (AppConfig.supabaseAnonKey) {
+      config.headers.apikey = AppConfig.supabaseAnonKey;
+      config.headers['Authorization'] = `Bearer ${AppConfig.supabaseAnonKey}`;
+    } else if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
     return config;
@@ -44,8 +44,80 @@ export const ApiService = {
     return ApiClient.post('/auth/login', { usuario, senha });
   },
 
+  async getHeadcountByMatricula(matricula) {
+    return ApiClient.get('/headcount_colaboradores', {
+      params: {
+        select: 'matricula,senha,nome,departamento,cargo,gestor,status,admissao_excel,fonte_aba,fonte_arquivo,reference_date,imported_at',
+        matricula: `eq.${matricula}`,
+        status: 'eq.ATIVO',
+        limit: 1,
+      },
+    });
+  },
+
+  async getHeadcountPage(offset = 0, limit = 500) {
+    return ApiClient.get('/headcount_colaboradores', {
+      params: {
+        select: 'matricula,senha,nome,departamento,cargo,gestor,status,admissao_excel,fonte_aba,fonte_arquivo,reference_date,imported_at',
+        status: 'eq.ATIVO',
+        order: 'matricula.asc',
+        offset,
+        limit,
+      },
+    });
+  },
+
   async syncRespostas(respostas) {
-    return ApiClient.post('/sync/respostas', { registros: respostas });
+    const rows = respostas.map((payload) => ({
+      id: payload.resposta_id,
+      formulario_id: payload.formulario_id,
+      formulario_versao: payload.formulario_versao || null,
+      usuario_id: payload.usuario_id || null,
+      dados_json: payload.dados || {},
+      mapeamento_legado: payload.mapeamento_legado || null,
+      status: 'pendente_validacao',
+      criado_em: payload.criado_em || new Date().toISOString(),
+      enviado_em: new Date().toISOString(),
+      origem: 'app_android',
+      updated_at: new Date().toISOString(),
+    }));
+
+    const response = await ApiClient.post('/mobile_respostas', rows, {
+      headers: {
+        Prefer: 'resolution=merge-duplicates,return=representation',
+      },
+    });
+
+    const gpsRows = respostas.flatMap((payload) => (
+      Array.isArray(payload.gps_pontos)
+        ? payload.gps_pontos
+          .filter((point) => Number.isFinite(Number(point.latitude)) && Number.isFinite(Number(point.longitude)))
+          .map((point, index) => ({
+            id: `gps_${payload.resposta_id}_${index + 1}`,
+            resposta_id: payload.resposta_id,
+            campo_id: point.campo_id || 'gps',
+            latitude: Number(point.latitude),
+            longitude: Number(point.longitude),
+            precisao: point.precisao ?? null,
+            altitude: point.altitude ?? null,
+            capturado_em: point.capturado_em || payload.criado_em || new Date().toISOString(),
+          }))
+        : []
+    ));
+
+    if (gpsRows.length > 0) {
+      try {
+        await ApiClient.post('/mobile_gps', gpsRows, {
+          headers: {
+            Prefer: 'resolution=merge-duplicates,return=minimal',
+          },
+        });
+      } catch (gpsError) {
+        console.warn('GPS points sync failed after response sync:', gpsError?.message || gpsError);
+      }
+    }
+
+    return response;
   },
 
   async syncAnexo(respostaId, caminhoLocal) {
@@ -68,6 +140,11 @@ export const ApiService = {
   },
 
   async getFormularios() {
-    return ApiClient.get('/formularios');
+    return ApiClient.get('/mobile_formularios', {
+      params: {
+        select: 'id,area_id,titulo,descricao,versao,campos_json',
+        ativo: 'eq.true',
+      },
+    });
   },
 };

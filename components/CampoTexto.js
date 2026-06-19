@@ -47,7 +47,7 @@ export default function CampoTexto({ field, value, onChange, error, visualMode }
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 20,
+    marginBottom: 14,
   },
   paperContainer: {
     marginBottom: 10,
@@ -60,9 +60,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.grayDark,
+    fontSize: 13,
+    fontWeight: '900',
+    color: Colors.greenDark,
   },
   required: {
     color: Colors.danger,
@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: Colors.cardBorder,
-    borderRadius: 12,
+    borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 15,

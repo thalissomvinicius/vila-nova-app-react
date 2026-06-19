@@ -44,6 +44,18 @@ const deleteStorageItem = async (key) => {
 };
 
 export const SecureStoreService = {
+  async getItem(key) {
+    return await getStorageItem(key);
+  },
+
+  async setItem(key, value) {
+    await setStorageItem(key, value);
+  },
+
+  async deleteItem(key) {
+    await deleteStorageItem(key);
+  },
+
   async saveToken(token) {
     await setStorageItem(KEY_TOKEN, token);
   },

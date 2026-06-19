@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vila Nova Coletas",
     "slug": "vilanova-agro-app-react",
-    "version": "1.0.13",
+    "version": "1.0.20",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -21,7 +21,7 @@
         "backgroundColor": "#234F2A"
       },
       "package": "br.com.vilanova.agroapp",
-      "versionCode": 14,
+      "versionCode": 21,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
@@ -62,7 +62,7 @@
     "extra": {
       "apiBaseUrl": "https://wcifxyvesmhqurqhnway.supabase.co/rest/v1",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndjaWZ4eXZlc21ocXVycWhud2F5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMDY2MjgsImV4cCI6MjA4NTc4MjYyOH0.1hnE3IuZQ5wrXtXA22GxS-pUAiSnIlZBOiuGUgS1ABw",
-      "appVersion": "1.0.13",
+      "appVersion": "1.0.20",
       "router": {
         "origin": "https://api.vilanova-agro.com.br"
       },

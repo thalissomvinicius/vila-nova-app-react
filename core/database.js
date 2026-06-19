@@ -2,13 +2,30 @@ import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
 
 const CQO_FAZENDAS_TOME_ACU = ['FÉ EM DEUS', 'NOVA CONCEIÇÃO', 'VILA NOVA'];
+const CQO_FISCAIS_FITOSSANIDADE = [
+  '1938 - DANIEL SOUZA COSTA',
+];
+const CQO_FISCAIS_EQUIPE = [
+  '2833 - ANTONIO BARBOSA FERREIRA',
+  '1790 - DANILSON OLIVEIRA MOREIRA',
+  '2950 - FRANCISCO DAS CHAGAS PEREIRA SANTOS',
+  '2844 - JOAO GABRIEL PEREIRA BEZERRA',
+  '384 - RAIMUNDO NONATO DOS SANTOS FURTADO JUNIOR',
+  '2146 - RENEY NERES DA COSTA',
+  '2084 - RONALD DA SILVA PONTES',
+  '1155 - VALDINEI GOMES SANCHES',
+  '2179 - JOAO BATISTA SANTOS DE OLIVEIRA',
+  '2487 - ANTONIO CARLOS PEREIRA SOARES',
+  '2798 - MAISES ALBUQUERQUE DE ANDRADE',
+  '2963 - VALCIONE DA CONCEICAO',
+];
 
 const CQO_CORTE_FORM = {
   id: 'form_cqo_corte',
   area_id: 'campo',
   titulo: 'CQO Corte',
   descricao: 'Piloto digital do formulário Corte. Baseado no papel CQO Corte e Carreamento e alinhado à tabela dig_corte da planilha 1_Digitacao_CQO.',
-  versao: 4,
+  versao: 7,
   ativo: 1,
   campos_json: JSON.stringify([
     { id: 'nome_polo', tipo: 'selecao', titulo: 'Polo', opcoes: ['Tomé-Açu'], obrigatorio: 1, legado: 'NomePolo' },
@@ -17,8 +34,10 @@ const CQO_CORTE_FORM = {
     { id: 'data_avaliacao', tipo: 'data', titulo: 'Data da avaliação', obrigatorio: 1, legado: 'DataAvaliacao' },
     { id: 'ciclo_mes', tipo: 'numero', titulo: 'Ciclo do mês', placeholder: 'Ex: 1', obrigatorio: 0, legado: 'ciclo_mes' },
     { id: 'matricula_avaliador', tipo: 'texto', titulo: 'Matrícula do avaliador', placeholder: 'Ex: 2005', obrigatorio: 1, legado: 'MatriculaAvaliadores' },
-    { id: 'fiscal_resp', tipo: 'texto', titulo: 'Fiscal responsável', placeholder: 'Nome do fiscal', obrigatorio: 1, legado: 'Fiscal Resp' },
-    { id: 'linhas_corte', tipo: 'linhas_cqo_corte', titulo: 'Linhas de avaliação do corte', obrigatorio: 1, legado: 'linhas_raw' },
+    { id: 'matricula_avaliador_2', tipo: 'texto', titulo: 'Matrícula do avaliador 2', placeholder: 'Opcional', obrigatorio: 0, legado: 'MatriculaAvaliador2' },
+    { id: 'fiscal_resp', tipo: 'selecao', titulo: 'Fiscal responsável', opcoes: CQO_FISCAIS_FITOSSANIDADE, obrigatorio: 1, legado: 'Fiscal Resp' },
+    { id: 'fiscal_resp_equipe', tipo: 'selecao', titulo: 'Fiscal responsável da equipe', opcoes: CQO_FISCAIS_EQUIPE, obrigatorio: 1, legado: 'Fiscal Resp Equipe' },
+    { id: 'linhas_corte', tipo: 'linhas_cqo_corte', titulo: 'Ruas avaliadas do corte', obrigatorio: 1, legado: 'linhas_raw' },
     { id: 'observacao', tipo: 'observacao', titulo: 'Observação geral', placeholder: 'Registre observações sem aplicar regra automática.', obrigatorio: 0, legado: 'Observacao' },
     { id: 'acompanhamento', tipo: 'acompanhamento', titulo: 'Acompanhamento', obrigatorio: 0 }
   ]),
@@ -28,9 +47,9 @@ const CQO_CORTE_FORM = {
 const CQO_CARREAMENTO_FORM = {
   id: 'form_cqo_carreamento_fruto_solto',
   area_id: 'campo',
-  titulo: 'CQO Carreamento e Fruto Solto',
-  descricao: 'Piloto digital do controle único de Carreamento e Fruto Solto. Fruto solto pode ser preenchido quando a avaliação ocorrer, mas normalmente fica opcional.',
-  versao: 5,
+  titulo: 'CQO Carreamento',
+  descricao: 'Piloto digital do controle de Carreamento.',
+  versao: 8,
   ativo: 1,
   campos_json: JSON.stringify([
     { id: 'nome_polo', tipo: 'selecao', titulo: 'Polo', opcoes: ['Tomé-Açu'], obrigatorio: 1, legado: 'NomePolo' },
@@ -44,7 +63,9 @@ const CQO_CARREAMENTO_FORM = {
     { id: 'data_avaliacao', tipo: 'data', titulo: 'Data da avaliação', obrigatorio: 1, legado: 'DataAvaliacao' },
     { id: 'ciclo_mes', tipo: 'numero', titulo: 'Ciclo do mês', placeholder: 'Ex: 1', obrigatorio: 0, legado: 'Ciclo_mes' },
     { id: 'matricula_avaliador', tipo: 'texto', titulo: 'Matrícula do avaliador', placeholder: 'Ex: 2005', obrigatorio: 1, legado: 'MatriculaAvaliadores' },
-    { id: 'fiscal_resp', tipo: 'texto', titulo: 'Fiscal responsável', placeholder: 'Nome do fiscal', obrigatorio: 1, legado: 'Fiscal Resp' },
+    { id: 'matricula_avaliador_2', tipo: 'texto', titulo: 'Matrícula do avaliador 2', placeholder: 'Opcional', obrigatorio: 0, legado: 'MatriculaAvaliador2' },
+    { id: 'fiscal_resp', tipo: 'selecao', titulo: 'Fiscal responsável', opcoes: CQO_FISCAIS_FITOSSANIDADE, obrigatorio: 1, legado: 'Fiscal Resp' },
+    { id: 'fiscal_resp_equipe', tipo: 'selecao', titulo: 'Fiscal responsável da equipe', opcoes: CQO_FISCAIS_EQUIPE, obrigatorio: 1, legado: 'Fiscal Resp Equipe' },
     { id: 'linhas_carreamento', tipo: 'linhas_cqo_carreamento', titulo: 'Linhas de avaliação do carreamento', obrigatorio: 1, legado: 'linhas_raw' },
     { id: 'observacao', tipo: 'observacao', titulo: 'Observação geral', placeholder: 'Registre observações sem aplicar regra automática.', obrigatorio: 0 },
     { id: 'acompanhamento', tipo: 'acompanhamento', titulo: 'Acompanhamento', obrigatorio: 0 }
@@ -443,11 +464,60 @@ export const AppDatabase = {
       if (sql.includes('SELECT * FROM formularios')) {
         return webStorage.formularios;
       }
+      if (sql.includes('SELECT * FROM usuarios')) {
+        return webStorage.usuarios;
+      }
+      if (sql.includes('SELECT * FROM anexos')) {
+        return webStorage.anexos;
+      }
+      if (sql.includes('SELECT * FROM assinaturas')) {
+        return webStorage.assinaturas;
+      }
+      if (sql.includes('SELECT * FROM gps')) {
+        return webStorage.gps;
+      }
+      if (sql.includes('SELECT * FROM headcount_colaboradores')) {
+        return webStorage.headcount_colaboradores;
+      }
+      if (sql.includes('SELECT * FROM app_meta')) {
+        const rows = [];
+        try {
+          for (let index = 0; index < localStorage.length; index += 1) {
+            const chave = localStorage.key(index);
+            if (chave?.startsWith('draft_formulario_')) {
+              rows.push({
+                chave,
+                valor: localStorage.getItem(chave),
+                atualizado_em: null,
+              });
+            }
+          }
+        } catch (_) {}
+        return rows;
+      }
+      if (sql.includes('FROM respostas r')) {
+        return [...webStorage.respostas]
+          .map((resposta) => {
+            const form = webStorage.formularios.find((item) => item.id === resposta.formulario_id);
+            return {
+              ...resposta,
+              form_titulo: form?.titulo || resposta.formulario_id,
+              area_id: form?.area_id || null,
+            };
+          })
+          .sort((a, b) => String(b.criado_em || '').localeCompare(String(a.criado_em || '')));
+      }
       if (sql.includes('SELECT * FROM respostas')) {
-        return webStorage.respostas;
+        return [...webStorage.respostas]
+          .sort((a, b) => String(b.criado_em || '').localeCompare(String(a.criado_em || '')));
       }
       if (sql.includes('SELECT * FROM sync_queue WHERE status = ?')) {
         return webStorage.sync_queue.filter(q => q.status === params[0]);
+      }
+      if (sql.includes('SELECT * FROM sync_queue')) {
+        return [...webStorage.sync_queue]
+          .sort((a, b) => String(b.processado_em || b.criado_em || '').localeCompare(String(a.processado_em || a.criado_em || '')))
+          .slice(0, 40);
       }
       return [];
     }
@@ -467,8 +537,14 @@ export const AppDatabase = {
         }
         return { count: webStorage.formularios.length };
       }
+      if (sql.includes('SELECT COUNT(*) as count FROM respostas')) {
+        return { count: webStorage.respostas.length };
+      }
       if (sql.includes('SELECT * FROM formularios WHERE id = ?')) {
         return webStorage.formularios.find(f => f.id === params[0]) || null;
+      }
+      if (sql.includes('SELECT * FROM respostas WHERE id = ?')) {
+        return webStorage.respostas.find(r => r.id === params[0]) || null;
       }
       if (sql.includes('SELECT * FROM usuarios') || sql.includes('FROM usuarios WHERE')) {
         if (params[0]) {
@@ -491,6 +567,81 @@ export const AppDatabase = {
 
   run(sql, params = []) {
     if (Platform.OS === 'web') {
+      if (sql.includes("UPDATE sync_queue SET status = 'enviando' WHERE id = ?")) {
+        const item = webStorage.sync_queue.find((queueItem) => queueItem.id === params[0]);
+        if (item) item.status = 'enviando';
+        localStorage.setItem('vilanova_sync_queue', JSON.stringify(webStorage.sync_queue));
+      }
+      if (sql.includes("UPDATE sync_queue SET status = 'sincronizado', processado_em = ? WHERE id = ?")) {
+        const item = webStorage.sync_queue.find((queueItem) => queueItem.id === params[1]);
+        if (item) {
+          item.status = 'sincronizado';
+          item.processado_em = params[0];
+          item.erro_msg = null;
+        }
+        localStorage.setItem('vilanova_sync_queue', JSON.stringify(webStorage.sync_queue));
+      }
+      if (sql.includes("UPDATE sync_queue SET status = 'erro', tentativas = tentativas + 1, erro_msg = ? WHERE id = ?")) {
+        const item = webStorage.sync_queue.find((queueItem) => queueItem.id === params[1]);
+        if (item) {
+          item.status = 'erro';
+          item.erro_msg = params[0];
+          item.tentativas = Number(item.tentativas || 0) + 1;
+        }
+        localStorage.setItem('vilanova_sync_queue', JSON.stringify(webStorage.sync_queue));
+      }
+      if (sql.includes("UPDATE respostas SET status = 'sincronizado', enviado_em = ? WHERE id = ?")) {
+        const item = webStorage.respostas.find((resposta) => resposta.id === params[1]);
+        if (item) {
+          item.status = 'sincronizado';
+          item.enviado_em = params[0];
+          item.erro_msg = null;
+        }
+        localStorage.setItem('vilanova_respostas', JSON.stringify(webStorage.respostas));
+      }
+      if (sql.includes("UPDATE respostas SET status = 'sincronizado', enviado_em = COALESCE(enviado_em, ?) WHERE id = ?")) {
+        const item = webStorage.respostas.find((resposta) => resposta.id === params[1]);
+        if (item && item.status === 'erro') {
+          item.status = 'sincronizado';
+          item.enviado_em = item.enviado_em || params[0];
+          item.erro_msg = null;
+        }
+        localStorage.setItem('vilanova_respostas', JSON.stringify(webStorage.respostas));
+      }
+      if (sql.includes("UPDATE respostas SET status = 'erro', erro_msg = ? WHERE id = ?")) {
+        const item = webStorage.respostas.find((resposta) => resposta.id === params[1]);
+        if (item) {
+          item.status = 'erro';
+          item.erro_msg = params[0];
+        }
+        localStorage.setItem('vilanova_respostas', JSON.stringify(webStorage.respostas));
+      }
+      if (sql.includes('UPDATE anexos SET enviado = 1 WHERE resposta_id = ?')) {
+        webStorage.anexos = webStorage.anexos.map((item) => (
+          item.resposta_id === params[0] ? { ...item, enviado: 1 } : item
+        ));
+        localStorage.setItem('vilanova_anexos', JSON.stringify(webStorage.anexos));
+      }
+      if (sql.includes('DELETE FROM respostas WHERE id = ?')) {
+        webStorage.respostas = webStorage.respostas.filter((item) => item.id !== params[0]);
+        localStorage.setItem('vilanova_respostas', JSON.stringify(webStorage.respostas));
+      }
+      if (sql.includes('DELETE FROM sync_queue WHERE referencia_id = ?')) {
+        webStorage.sync_queue = webStorage.sync_queue.filter((item) => item.referencia_id !== params[0]);
+        localStorage.setItem('vilanova_sync_queue', JSON.stringify(webStorage.sync_queue));
+      }
+      if (sql.includes('DELETE FROM anexos WHERE resposta_id = ?')) {
+        webStorage.anexos = webStorage.anexos.filter((item) => item.resposta_id !== params[0]);
+        localStorage.setItem('vilanova_anexos', JSON.stringify(webStorage.anexos));
+      }
+      if (sql.includes('DELETE FROM gps WHERE resposta_id = ?')) {
+        webStorage.gps = webStorage.gps.filter((item) => item.resposta_id !== params[0]);
+        localStorage.setItem('vilanova_gps', JSON.stringify(webStorage.gps));
+      }
+      if (sql.includes('DELETE FROM assinaturas WHERE resposta_id = ?')) {
+        webStorage.assinaturas = webStorage.assinaturas.filter((item) => item.resposta_id !== params[0]);
+        localStorage.setItem('vilanova_assinaturas', JSON.stringify(webStorage.assinaturas));
+      }
       return { lastInsertRowId: Date.now(), changes: 1 };
     }
     return db.runSync(sql, params);
@@ -513,6 +664,16 @@ export const AppDatabase = {
         if (index >= 0) webStorage.gps[index] = data;
         else webStorage.gps.push(data);
         localStorage.setItem('vilanova_gps', JSON.stringify(webStorage.gps));
+      } else if (table === 'anexos') {
+        const index = webStorage.anexos.findIndex(a => a.id === data.id);
+        if (index >= 0) webStorage.anexos[index] = data;
+        else webStorage.anexos.push(data);
+        localStorage.setItem('vilanova_anexos', JSON.stringify(webStorage.anexos));
+      } else if (table === 'assinaturas') {
+        const index = webStorage.assinaturas.findIndex(a => a.id === data.id);
+        if (index >= 0) webStorage.assinaturas[index] = data;
+        else webStorage.assinaturas.push(data);
+        localStorage.setItem('vilanova_assinaturas', JSON.stringify(webStorage.assinaturas));
       } else if (table === 'usuarios') {
         const index = webStorage.usuarios.findIndex(u => u.id === data.id);
         if (index >= 0) webStorage.usuarios[index] = data;

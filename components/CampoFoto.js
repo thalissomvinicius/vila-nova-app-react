@@ -9,11 +9,68 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
+import * as FileSystem from 'expo-file-system';
 import { Colors } from '../core/colors';
 
+const GPS_TIMEOUT_MS = 6000;
+
+async function withTimeout(promise, timeoutMs) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function capturePhotoGps() {
+  try {
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (permission.status !== 'granted') return null;
+
+    const enabled = await Location.hasServicesEnabledAsync();
+    if (!enabled) return null;
+
+    const lastKnown = await Location.getLastKnownPositionAsync({
+      maxAge: 120000,
+      requiredAccuracy: 120,
+    });
+
+    try {
+      const current = await withTimeout(
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+          mayShowUserSettingsDialog: true,
+        }),
+        GPS_TIMEOUT_MS
+      );
+      const lastAccuracy = lastKnown?.coords?.accuracy ?? Number.POSITIVE_INFINITY;
+      const currentAccuracy = current.coords.accuracy ?? Number.POSITIVE_INFINITY;
+      return currentAccuracy <= lastAccuracy ? current : lastKnown;
+    } catch {
+      return lastKnown;
+    }
+  } catch {
+    return null;
+  }
+}
+
+function normalizePhotoValue(value) {
+  if (!value) return null;
+  if (typeof value === 'string') return { uri: value };
+  if (typeof value === 'object') return value;
+  return null;
+}
+
 export default function CampoFoto({ field, value, onChange, error }) {
-  const { id, titulo, obrigatorio } = field;
+  const { titulo, obrigatorio } = field;
   const [isLoading, setIsLoading] = useState(false);
+  const photo = normalizePhotoValue(value);
 
   const requestPermissions = async () => {
     const cameraRes = await ImagePicker.requestCameraPermissionsAsync();
@@ -26,30 +83,52 @@ export default function CampoFoto({ field, value, onChange, error }) {
     const hasPermission = await requestPermissions();
     if (!hasPermission) {
       Alert.alert(
-        'Permissão necessária',
-        'O aplicativo precisa de permissões de câmera e galeria para funcionar.'
+        'Permissao necessaria',
+        'O aplicativo precisa de permissoes de camera e galeria para funcionar.'
       );
       setIsLoading(false);
       return;
     }
 
     try {
-      let result;
       const options = {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        quality: 0.7, // Auto compress image
+        quality: 0.55,
       };
 
-      if (useCamera) {
-        result = await ImagePicker.launchCameraAsync(options);
-      } else {
-        result = await ImagePicker.launchImageLibraryAsync(options);
-      }
+      const result = useCamera
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const imageUri = result.assets[0].uri;
-        onChange(imageUri);
+        const asset = result.assets[0];
+        const position = await capturePhotoGps();
+        let base64 = '';
+
+        try {
+          base64 = await FileSystem.readAsStringAsync(asset.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+        } catch {
+          base64 = '';
+        }
+
+        onChange({
+          uri: asset.uri,
+          base64,
+          mimeType: 'image/jpeg',
+          width: asset.width || null,
+          height: asset.height || null,
+          capturedAt: new Date().toISOString(),
+          gps: position ? {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            precisao: position.coords.accuracy ?? null,
+            altitude: position.coords.altitude ?? null,
+            capturado_em: new Date(position.timestamp || Date.now()).toISOString(),
+          } : null,
+        });
       }
     } catch (e) {
       console.error('Error picking image:', e);
@@ -61,10 +140,10 @@ export default function CampoFoto({ field, value, onChange, error }) {
 
   const showSourceDialog = () => {
     Alert.alert(
-      'Selecionar Foto',
-      'Escolha a origem da foto de evidência:',
+      'Selecionar foto',
+      'Escolha a origem da imagem de evidencia:',
       [
-        { text: 'Câmera', onPress: () => handlePickImage(true) },
+        { text: 'Camera', onPress: () => handlePickImage(true) },
         { text: 'Galeria', onPress: () => handlePickImage(false) },
         { text: 'Cancelar', style: 'cancel' },
       ],
@@ -83,16 +162,21 @@ export default function CampoFoto({ field, value, onChange, error }) {
         style={[
           styles.photoBox,
           error ? styles.photoBoxError : null,
-          value ? styles.photoBoxActive : null,
+          photo ? styles.photoBoxActive : null,
         ]}
-        onPress={value ? null : showSourceDialog}
+        onPress={photo ? null : showSourceDialog}
         activeOpacity={0.8}
       >
-        {value ? (
+        {photo ? (
           <View style={styles.imageContainer}>
-            <Image source={{ uri: value }} style={styles.image} resizeMode="cover" />
+            <Image source={{ uri: photo.uri }} style={styles.image} resizeMode="cover" />
+            {photo.gps ? (
+              <View style={styles.gpsBadge}>
+                <Text style={styles.gpsBadgeText}>GPS</Text>
+              </View>
+            ) : null}
             <TouchableOpacity style={styles.deleteBadge} onPress={() => onChange('')}>
-              <Text style={styles.deleteText}>✕</Text>
+              <Text style={styles.deleteText}>x</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -101,8 +185,8 @@ export default function CampoFoto({ field, value, onChange, error }) {
               <ActivityIndicator color={Colors.greenInstitutional} size="large" />
             ) : (
               <>
-                <Text style={styles.placeholderIcon}>📷</Text>
-                <Text style={styles.placeholderText}>Tirar Foto de Evidência</Text>
+                <Text style={styles.placeholderIcon}>CAM</Text>
+                <Text style={styles.placeholderText}>Registrar imagem geolocalizada</Text>
               </>
             )}
           </View>
@@ -172,15 +256,30 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 12,
   },
+  gpsBadge: {
+    position: 'absolute',
+    left: 12,
+    bottom: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(11, 107, 74, 0.88)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  gpsBadgeText: {
+    color: Colors.white,
+    fontWeight: '900',
+    fontSize: 11,
+  },
   placeholderContainer: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   placeholderIcon: {
-    fontSize: 40,
+    fontSize: 18,
     color: Colors.grayText,
-    opacity: 0.5,
+    opacity: 0.75,
     marginBottom: 8,
+    fontWeight: '900',
   },
   placeholderText: {
     fontSize: 14,

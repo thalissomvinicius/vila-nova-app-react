@@ -1,5 +1,8 @@
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import * as Font from 'expo-font';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
@@ -31,6 +34,32 @@ export default function RootLayout() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web') return undefined;
+
+    const isFontTimeout = (reason) => (
+      typeof reason?.message === 'string'
+      && reason.message.includes('ms timeout exceeded')
+    );
+
+    Font.loadAsync(MaterialCommunityIcons.font).catch((error) => {
+      if (!isFontTimeout(error)) {
+        console.warn('Icon font load unavailable:', error);
+      }
+    });
+
+    const handleUnhandledRejection = (event) => {
+      if (isFontTimeout(event.reason)) {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
   // 1. Initialize SQLite Database schemas and seed data
   useEffect(() => {
     try {
@@ -52,11 +81,11 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <PaperProvider theme={paperTheme}>
       <SafeAreaProvider>
-        <StatusBar style="light" backgroundColor="#084C35" />
+        <StatusBar style="light" backgroundColor={Colors.greenInstitutional} />
         <Stack
           screenOptions={{
             headerStyle: {
-              backgroundColor: '#0B6B4A',
+              backgroundColor: Colors.greenInstitutional,
             },
             headerTintColor: '#FFFFFF',
             headerTitleStyle: {
@@ -69,9 +98,10 @@ export default function RootLayout() {
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="home" options={{ headerShown: false }} />
           <Stack.Screen name="formularios/[areaId]" options={{ title: 'Formulários' }} />
-          <Stack.Screen name="preencher/[formId]" options={{ title: 'Preencher Coleta' }} />
-          <Stack.Screen name="sync" options={{ title: 'Central de Sync' }} />
+          <Stack.Screen name="preencher/[formId]" options={{ headerShown: false }} />
+          <Stack.Screen name="sync" options={{ title: 'Central de Sincronização' }} />
           <Stack.Screen name="historico" options={{ title: 'Histórico' }} />
+          <Stack.Screen name="profile" options={{ headerShown: false }} />
         </Stack>
       </SafeAreaProvider>
       </PaperProvider>
