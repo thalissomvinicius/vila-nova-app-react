@@ -1,0 +1,74 @@
+
+> vilanova-agro-app-react@1.0.0 web
+> expo start --web --port 19006 --non-interactive
+
+Starting project at C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master
+Starting Metro Bundler
+Waiting on http://localhost:19006
+Logs for your project will appear below.
+Web Bundled 2380ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1308 modules)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 71ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 59ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 65ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 46ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 58ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 52ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 51ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 55ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 57ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 76ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 58ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 55ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 88ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+› Detected a change in babel.config.js. Restart the server to see the new results. You may need to clear the bundler cache with the --clear flag for your changes to take effect.
+› Detected a change in babel.config.js. Restart the server to see the new results. You may need to clear the bundler cache with the --clear flag for your changes to take effect.
+Web Bundled 56ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 43ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 50ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 45ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 42ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 38ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 42ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 38ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 45ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 35ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 40ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 48ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 41ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 40ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 39ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 36ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 70ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 62ms C:\Users\thali\OneDrive\Desktop\vila-nova-app-react-master\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
