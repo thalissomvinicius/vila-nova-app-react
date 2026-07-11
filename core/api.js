@@ -4,6 +4,7 @@ import { SecureStoreService } from './secureStore';
 import { AppConfig } from './config';
 import { getDeviceId } from './deviceIdentity';
 import { stripInlineBase64 } from './mediaPayload';
+import { createImageThumbnailForUpload, getLocalImageSizeBytes, optimizeImageForUpload } from './imageOptimizer';
 
 const ATTACHMENT_BUCKET = 'mobile-anexos';
 const MAX_RESTORE_ROWS = 300;
@@ -69,12 +70,57 @@ function isSupabaseSchemaCacheError(error) {
   return error?.response?.status === 400 && message.toLowerCase().includes('schema cache');
 }
 
+function isSupabaseMissingColumnError(error) {
+  const message = String(error?.response?.data?.message || error?.message || '').toLowerCase();
+  const details = String(error?.response?.data?.details || '').toLowerCase();
+  return error?.response?.status === 400
+    && (
+      message.includes('could not find')
+      || message.includes('column')
+      || details.includes('schema cache')
+      || details.includes('column')
+    );
+}
+
 async function postMobileRespostasRows(rows) {
   return ApiClient.post('/mobile_respostas', rows, {
     headers: {
       Prefer: 'resolution=merge-duplicates,return=representation',
     },
   });
+}
+
+function stripAttachmentExtendedColumns(row) {
+  const compatible = { ...row };
+  delete compatible.thumbnail_storage_path;
+  delete compatible.thumbnail_tamanho_bytes;
+  delete compatible.original_tamanho_bytes;
+  delete compatible.otimizado;
+  return compatible;
+}
+
+async function postMobileAnexosRows(rows) {
+  return ApiClient.post('/mobile_anexos', rows, {
+    headers: {
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+  });
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, limit), items.length);
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }));
+
+  return results;
 }
 
 export const ApiService = {
@@ -243,14 +289,15 @@ export const ApiService = {
   },
 
   async syncAnexosMetadata(respostas) {
-    const rows = (await Promise.all(respostas.map((payload) => collectAttachmentRows(payload)))).flat();
+    const rows = (await mapWithConcurrency(respostas, 2, (payload) => collectAttachmentRows(payload))).flat();
     if (rows.length === 0) return { count: 0 };
 
-    await ApiClient.post('/mobile_anexos', rows, {
-      headers: {
-        Prefer: 'resolution=merge-duplicates,return=minimal',
-      },
-    });
+    try {
+      await postMobileAnexosRows(rows);
+    } catch (error) {
+      if (!isSupabaseSchemaCacheError(error) && !isSupabaseMissingColumnError(error)) throw error;
+      await postMobileAnexosRows(rows.map(stripAttachmentExtendedColumns));
+    }
 
     return { count: rows.length };
   },
@@ -271,7 +318,14 @@ export const ApiService = {
   },
 
   async getAnexosByResponseIds(responseIds) {
-    return fetchByResponseIds('/mobile_anexos', responseIds, 'id,resposta_id,campo_id,storage_path,nome_arquivo,tamanho_bytes,tipo_mime,criado_em');
+    const extendedSelect = 'id,resposta_id,campo_id,storage_path,thumbnail_storage_path,thumbnail_tamanho_bytes,original_tamanho_bytes,otimizado,nome_arquivo,tamanho_bytes,tipo_mime,criado_em';
+    const compatibleSelect = 'id,resposta_id,campo_id,storage_path,nome_arquivo,tamanho_bytes,tipo_mime,criado_em';
+    try {
+      return await fetchByResponseIds('/mobile_anexos', responseIds, extendedSelect);
+    } catch (error) {
+      if (!isSupabaseSchemaCacheError(error) && !isSupabaseMissingColumnError(error)) throw error;
+      return fetchByResponseIds('/mobile_anexos', responseIds, compatibleSelect);
+    }
   },
 
   async logMobileSync({ status, mensagem, respostaId = null, dispositivoId = null }) {
@@ -359,6 +413,13 @@ function storageObjectUrl(path) {
   return `${origin}/storage/v1/object/${ATTACHMENT_BUCKET}/${encodedPath}`;
 }
 
+function thumbnailStoragePathFor(storagePath) {
+  const parts = String(storagePath || '').split('/').filter(Boolean);
+  const filename = parts.pop() || 'foto.jpg';
+  const safeFilename = filename.replace(/\.[a-z0-9]+$/i, '') || 'foto';
+  return [...parts, 'thumbs', `${safeFilename}_thumb.jpg`].join('/');
+}
+
 async function blobFromBase64(base64, mimeType) {
   const dataUrl = String(base64 || '').startsWith('data:')
     ? base64
@@ -389,28 +450,20 @@ async function uploadAttachmentBlob({ storagePath, body, mimeType }) {
     throw new Error(`Storage HTTP ${response.status}${detail ? `: ${detail.slice(0, 180)}` : ''}`);
   }
 
-  return storagePath;
+  return {
+    storagePath,
+    tamanhoBytes: body?.size || null,
+  };
 }
 
-async function uploadAttachmentBase64({ storagePath, base64, mimeType }) {
-  if (!base64) return null;
-  const body = await blobFromBase64(base64, mimeType);
-  return uploadAttachmentBlob({ storagePath, body, mimeType });
-}
-
-async function uploadAttachmentFileUri({ storagePath, uri, mimeType }) {
-  const fileInfo = await FileSystem.getInfoAsync(uri);
-  if (!fileInfo.exists) {
-    throw new Error('arquivo local nao encontrado no aparelho');
-  }
-
+async function uploadLocalFileToStorage({ storagePath, uri, mimeType }) {
   const response = await FileSystem.uploadAsync(storageObjectUrl(storagePath), uri, {
     httpMethod: 'PUT',
     uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
     headers: {
       apikey: AppConfig.supabaseAnonKey,
       Authorization: `Bearer ${AppConfig.supabaseAnonKey}`,
-      'Content-Type': mimeType || 'application/octet-stream',
+      'Content-Type': mimeType || 'image/jpeg',
       'x-upsert': 'true',
     },
   });
@@ -419,7 +472,91 @@ async function uploadAttachmentFileUri({ storagePath, uri, mimeType }) {
     throw new Error(`Storage HTTP ${response.status}${response.body ? `: ${String(response.body).slice(0, 180)}` : ''}`);
   }
 
-  return storagePath;
+  return response;
+}
+
+async function tryUploadThumbnail({ storagePath, source, mimeType }) {
+  try {
+    const thumbnail = await createImageThumbnailForUpload({
+      ...(source || {}),
+      mimeType: mimeType || source?.mimeType || 'image/jpeg',
+    });
+    if (!thumbnail?.uri) return null;
+
+    const thumbnailStoragePath = thumbnailStoragePathFor(storagePath);
+    await uploadLocalFileToStorage({
+      storagePath: thumbnailStoragePath,
+      uri: thumbnail.uri,
+      mimeType: thumbnail.mimeType || 'image/jpeg',
+    });
+
+    return {
+      thumbnailStoragePath,
+      thumbnailTamanhoBytes: await getLocalImageSizeBytes(thumbnail.uri) || thumbnail.tamanho_bytes || null,
+    };
+  } catch (error) {
+    console.warn('Thumbnail upload skipped:', error?.message || error);
+    return null;
+  }
+}
+
+async function uploadAttachmentBase64({ storagePath, base64, mimeType }) {
+  if (!base64) return null;
+  const body = await blobFromBase64(base64, mimeType);
+  const result = await uploadAttachmentBlob({ storagePath, body, mimeType });
+  const dataUri = String(base64 || '').startsWith('data:')
+    ? base64
+    : `data:${mimeType || 'image/jpeg'};base64,${base64}`;
+  const thumbnail = await tryUploadThumbnail({
+    storagePath,
+    source: { uri: dataUri, mimeType: mimeType || 'image/jpeg' },
+    mimeType: mimeType || 'image/jpeg',
+  });
+  return {
+    ...result,
+    tamanhoBytes: result?.tamanhoBytes || estimateBase64Size(base64),
+    thumbnailStoragePath: thumbnail?.thumbnailStoragePath || null,
+    thumbnailTamanhoBytes: thumbnail?.thumbnailTamanhoBytes || null,
+  };
+}
+
+async function uploadAttachmentFileUri({ storagePath, uri, mimeType }) {
+  const fileInfo = await FileSystem.getInfoAsync(uri);
+  if (!fileInfo.exists) {
+    throw new Error('arquivo local nao encontrado no aparelho');
+  }
+
+  const optimized = await optimizeImageForUpload({
+    uri,
+    mimeType: mimeType || 'image/jpeg',
+  });
+  const uploadUri = optimized.uri || uri;
+  const uploadMimeType = optimized.mimeType || mimeType || 'image/jpeg';
+  const uploadSize = await getLocalImageSizeBytes(uploadUri);
+
+  await uploadLocalFileToStorage({
+    storagePath,
+    uri: uploadUri,
+    mimeType: uploadMimeType,
+  });
+  const thumbnail = await tryUploadThumbnail({
+    storagePath,
+    source: {
+      ...optimized,
+      uri: uploadUri,
+      mimeType: uploadMimeType,
+    },
+    mimeType: uploadMimeType,
+  });
+
+  return {
+    storagePath,
+    tamanhoBytes: uploadSize || optimized.tamanho_bytes || fileInfo.size || null,
+    originalTamanhoBytes: optimized.original_tamanho_bytes || fileInfo.size || null,
+    otimizado: Boolean(optimized.optimized),
+    thumbnailStoragePath: thumbnail?.thumbnailStoragePath || null,
+    thumbnailTamanhoBytes: thumbnail?.thumbnailTamanhoBytes || null,
+  };
 }
 
 async function uploadAttachmentUri({ storagePath, uri, mimeType }) {
@@ -455,7 +592,8 @@ async function collectAttachmentRows(payload) {
 
     if (value.base64 || value.uri) {
       const index = rows.length + 1;
-      const campoId = path.filter(Boolean).join('.') || `foto_${index}`;
+      const explicitCampoId = typeof value.campo_id === 'string' ? value.campo_id.trim() : '';
+      const campoId = explicitCampoId || path.filter(Boolean).join('.') || `foto_${index}`;
       const filename = filenameFromUri(value.uri, `${campoId.replace(/[^a-z0-9_-]+/gi, '_')}.jpg`);
       const storagePath = [
         sanitizeStorageSegment(payload.usuario_id || 'sem_usuario'),
@@ -466,12 +604,12 @@ async function collectAttachmentRows(payload) {
         id: `anexo_${respostaId}_${index}`,
         resposta_id: respostaId,
         campo_id: campoId.slice(0, 180),
-        storage_path: value.storage_path || (value.base64 ? `inline_json://${respostaId}/${campoId}` : value.uri || `anexo_pendente://${respostaId}/${campoId}`),
+        storage_path: value.storage_path || (value.uri || (value.base64 ? `inline_json://${respostaId}/${campoId}` : `anexo_pendente://${respostaId}/${campoId}`)),
         storage_upload_path: storagePath,
-        base64: value.base64 || null,
+        base64: value.uri ? null : value.base64 || null,
         uri: value.uri || null,
         nome_arquivo: filename,
-        tamanho_bytes: value.base64 ? estimateBase64Size(value.base64) : null,
+        tamanho_bytes: value.tamanho_bytes || value.size || (value.uri ? null : estimateBase64Size(value.base64)),
         tipo_mime: value.mimeType || value.tipo_mime || 'image/jpeg',
         criado_em: value.capturedAt || value.criado_em || payload.criado_em || new Date().toISOString(),
       });
@@ -481,30 +619,56 @@ async function collectAttachmentRows(payload) {
   };
 
   visit(payload.dados);
+  const dedupedRows = [];
+  const seenMedia = new Set();
+  rows.forEach((row) => {
+    const mediaKey = row.uri ? `uri:${row.uri}` : null;
+    if (mediaKey && seenMedia.has(mediaKey)) return;
+    if (mediaKey) seenMedia.add(mediaKey);
+    dedupedRows.push(row);
+  });
 
-  for (const row of rows) {
+  for (const row of dedupedRows) {
     try {
       if (row.uri) {
         try {
-          row.storage_path = await uploadAttachmentUri({
+          const uploadResult = await uploadAttachmentUri({
             storagePath: row.storage_upload_path,
             uri: row.uri,
             mimeType: row.tipo_mime,
           });
+          row.storage_path = uploadResult?.storagePath || uploadResult;
+          row.tamanho_bytes = uploadResult?.tamanhoBytes || row.tamanho_bytes;
+          row.thumbnail_storage_path = uploadResult?.thumbnailStoragePath || null;
+          row.thumbnail_tamanho_bytes = uploadResult?.thumbnailTamanhoBytes || null;
+          row.original_tamanho_bytes = uploadResult?.originalTamanhoBytes || row.tamanho_bytes || null;
+          row.otimizado = Boolean(uploadResult?.otimizado || uploadResult?.thumbnailStoragePath);
         } catch (uriError) {
           if (!row.base64) throw uriError;
-          row.storage_path = await uploadAttachmentBase64({
+          const uploadResult = await uploadAttachmentBase64({
             storagePath: row.storage_upload_path,
             base64: row.base64,
             mimeType: row.tipo_mime,
           });
+          row.storage_path = uploadResult?.storagePath || uploadResult;
+          row.tamanho_bytes = uploadResult?.tamanhoBytes || row.tamanho_bytes;
+          row.thumbnail_storage_path = uploadResult?.thumbnailStoragePath || null;
+          row.thumbnail_tamanho_bytes = uploadResult?.thumbnailTamanhoBytes || null;
+          row.original_tamanho_bytes = row.tamanho_bytes || null;
+          row.otimizado = Boolean(uploadResult?.thumbnailStoragePath);
         }
       } else if (row.base64) {
-        row.storage_path = await uploadAttachmentBase64({
+        const uploadResult = await uploadAttachmentBase64({
           storagePath: row.storage_upload_path,
           base64: row.base64,
           mimeType: row.tipo_mime,
         });
+        row.storage_path = uploadResult?.storagePath || uploadResult;
+        row.tamanho_bytes = uploadResult?.tamanhoBytes || row.tamanho_bytes;
+        row.thumbnail_storage_path = uploadResult?.thumbnailStoragePath || null;
+        row.thumbnail_tamanho_bytes = uploadResult?.thumbnailTamanhoBytes || null;
+        row.original_tamanho_bytes = row.tamanho_bytes || null;
+        row.otimizado = Boolean(uploadResult?.thumbnailStoragePath);
       }
     } catch (error) {
       throw new Error(`Upload do anexo ${row.campo_id} falhou: ${error?.message || error}`);
@@ -515,7 +679,7 @@ async function collectAttachmentRows(payload) {
     delete row.storage_upload_path;
   }
 
-  return rows;
+  return dedupedRows;
 }
 
 async function fetchByResponseIds(path, responseIds, select) {
