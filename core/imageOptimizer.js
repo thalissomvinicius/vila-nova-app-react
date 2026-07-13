@@ -2,14 +2,18 @@ import { Image, Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-const DEFAULT_MAX_EDGE = 1180;
-const DEFAULT_COMPRESS = 0.6;
-const SECOND_PASS_MAX_EDGE = 960;
-const SECOND_PASS_COMPRESS = 0.52;
-const TARGET_MAX_BYTES = 380 * 1024;
-const THUMB_MAX_EDGE = 360;
-const THUMB_COMPRESS = 0.48;
-const THUMB_TARGET_MAX_BYTES = 85 * 1024;
+const DEFAULT_MAX_EDGE = 1024;
+const DEFAULT_COMPRESS = 0.54;
+const SECOND_PASS_MAX_EDGE = 860;
+const SECOND_PASS_COMPRESS = 0.44;
+const FINAL_PASS_MAX_EDGE = 720;
+const FINAL_PASS_COMPRESS = 0.36;
+const TARGET_MAX_BYTES = 280 * 1024;
+const THUMB_MAX_EDGE = 320;
+const THUMB_COMPRESS = 0.42;
+const THUMB_SECOND_PASS_MAX_EDGE = 240;
+const THUMB_SECOND_PASS_COMPRESS = 0.34;
+const THUMB_TARGET_MAX_BYTES = 55 * 1024;
 
 function estimateDataUriSize(uri) {
   const match = String(uri || '').match(/^data:[^;]+;base64,(.+)$/);
@@ -114,6 +118,11 @@ export async function optimizeImageForUpload(input, options = {}) {
       optimizedSize = await getLocalImageSizeBytes(result.uri);
     }
 
+    if (optimizedSize && optimizedSize > TARGET_MAX_BYTES) {
+      result = await manipulate(result.uri, result, FINAL_PASS_MAX_EDGE, FINAL_PASS_COMPRESS);
+      optimizedSize = await getLocalImageSizeBytes(result.uri);
+    }
+
     return {
       ...source,
       uri: result.uri,
@@ -151,7 +160,12 @@ export async function createImageThumbnailForUpload(input, options = {}) {
     let thumbnailSize = await getLocalImageSizeBytes(result.uri);
 
     if (thumbnailSize && thumbnailSize > THUMB_TARGET_MAX_BYTES) {
-      result = await manipulate(result.uri, result, Math.min(280, maxEdge), 0.4);
+      result = await manipulate(
+        result.uri,
+        result,
+        Math.min(THUMB_SECOND_PASS_MAX_EDGE, maxEdge),
+        THUMB_SECOND_PASS_COMPRESS
+      );
       thumbnailSize = await getLocalImageSizeBytes(result.uri);
     }
 
